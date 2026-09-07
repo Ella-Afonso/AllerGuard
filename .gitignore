@@ -1,0 +1,43 @@
+# Python environment and generated files
+/.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Tool caches and test output
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+.aws/
+/.local/
+*.pem
+*.key
+
+# Frontend dependencies and output
+node_modules/
+.next/
+coverage/
+
+# Editor and OS files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Private local working files (root-anchored; intentionally not published)
+/context/
+/skills/
+/Overview/
+/memory.md
+/AGENTS.md
+/CLAUDE.md
