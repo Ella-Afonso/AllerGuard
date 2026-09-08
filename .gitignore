@@ -41,3 +41,9 @@ Thumbs.db
 /memory.md
 /AGENTS.md
 /CLAUDE.md
+
+# Generated AgentCore and Lambda deployment packages
+/infra/agentcore/package/
+/infra/agentcore/*.zip
+/infra/lambda/package/
+/infra/lambda/*.zip

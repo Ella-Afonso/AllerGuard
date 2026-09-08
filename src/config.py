@@ -15,6 +15,7 @@ class Settings(BaseModel):
 
     aws_region: str = Field(min_length=1)
     bedrock_model_id: str = Field(min_length=1)
+    agentcore_runtime_arn: str | None = None
 
     @classmethod
     def from_environment(cls) -> "Settings":
@@ -24,5 +25,8 @@ class Settings(BaseModel):
             bedrock_model_id=os.environ.get(
                 "ALLERGUARD_BEDROCK_MODEL_ID",
                 DEFAULT_BEDROCK_MODEL_ID,
+            ),
+            agentcore_runtime_arn=os.environ.get(
+                "ALLERGUARD_AGENTCORE_RUNTIME_ARN",
             ),
         )

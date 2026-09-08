@@ -3,12 +3,14 @@ name = "allerguard"
 version = "0.1.0"
 description = "Background recall monitoring and decision support for small UK food businesses."
 readme = "README.md"
-requires-python = ">=3.12,<3.13"
+requires-python = ">=3.12,<3.14"
 dependencies = [
     "strands-agents",
     "strands-agents-tools",
     "boto3[crt]",
     "pydantic>=2,<3",
+    "bedrock-agentcore==1.22.0",
+
 ]
 
 [project.optional-dependencies]
