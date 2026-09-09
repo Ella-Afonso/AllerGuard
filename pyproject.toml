@@ -18,6 +18,7 @@ dev = [
     "pytest",
     "ruff",
     "mypy",
+    "moto[dynamodb]>=5,<6",
 ]
 
 [tool.ruff]

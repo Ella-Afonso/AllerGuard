@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 DEFAULT_AWS_REGION = "eu-west-2"
 DEFAULT_BEDROCK_MODEL_ID = "eu.anthropic.claude-sonnet-4-5-20250929-v1:0"
+DEFAULT_DYNAMODB_TABLE_BUSINESSES = "allerguard-businesses"
 
 DEFAULT_FSA_MODE: Literal["live", "replay"] = "replay"
 DEFAULT_FSA_BASE_URI = "https://data.food.gov.uk/food-alerts"
@@ -39,6 +40,11 @@ class Settings(BaseModel):
     bedrock_model_id: str = Field(min_length=1)
     agentcore_runtime_arn: str | None = None
 
+    dynamodb_table_businesses: str = Field(
+        default=DEFAULT_DYNAMODB_TABLE_BUSINESSES,
+        min_length=1,
+    )
+
     fsa_mode: Literal["live", "replay"] = DEFAULT_FSA_MODE
     fsa_base_uri: str = Field(default=DEFAULT_FSA_BASE_URI, min_length=1)
     fsa_fixtures_path: Path = DEFAULT_FSA_FIXTURES_PATH
@@ -54,6 +60,10 @@ class Settings(BaseModel):
             ),
             agentcore_runtime_arn=os.environ.get(
                 "ALLERGUARD_AGENTCORE_RUNTIME_ARN",
+            ),
+            dynamodb_table_businesses=os.environ.get(
+                "ALLERGUARD_DYNAMODB_TABLE_BUSINESSES",
+                DEFAULT_DYNAMODB_TABLE_BUSINESSES,
             ),
             fsa_mode=_read_fsa_mode(),
             fsa_base_uri=os.environ.get(
