@@ -105,6 +105,16 @@ def test_parser_handles_missing_optional_problem_and_product_details() -> None:
     assert alerts[0].products == []
 
 
+def test_parser_accepts_one_other_business_object() -> None:
+    """The FSA API may return one otherBusiness object instead of a list."""
+    raw_alert = _raw_alert()
+    raw_alert["otherBusiness"] = {"commonName": "Waitrose & Partners"}
+
+    alerts = fsa_api.parse_fsa_response({"items": [raw_alert]})
+
+    assert alerts[0].other_businesses == ["Waitrose & Partners"]
+
+
 def test_parser_returns_withdrawn_alert_without_discarding_it() -> None:
     alerts = fsa_api.parse_fsa_response({"items": [_raw_alert(status="Withdrawn")]})
 
@@ -169,3 +179,15 @@ def test_live_mode_uses_the_shared_parser_without_a_network_request() -> None:
 
     assert len(alerts) == 1
     assert alerts[0].id == "FSA-AA-01-2026"
+
+
+def test_parser_extracts_matching_evidence_from_real_fixtures() -> None:
+    """Fixtures expose the business, allergen notation, and batch evidence."""
+    walnut_alert = fsa_api.parse_fsa_response(_read_fixture("match_confirmed"))[0]
+    doritos_alert = fsa_api.parse_fsa_response(_read_fixture("batch_unknown"))[0]
+
+    assert walnut_alert.reporting_business == "Waitrose & Partners"
+    assert {"walnut", "nuts"} <= set(walnut_alert.allergen_notations)
+
+    assert doritos_alert.reporting_business == "PepsiCo"
+    assert doritos_alert.batches[0].batch_code == "GBC 209 184C"

@@ -14,7 +14,7 @@ from urllib.request import Request, urlopen
 from strands import tool
 
 from src.config import Settings
-from src.domain.models import Alert, AlertType
+from src.domain.models import Alert, AlertBatch, AlertType
 
 logger = logging.getLogger(__name__)
 
@@ -120,6 +120,86 @@ def _extract_problem_allergens(record: JsonObject) -> list[str]:
     return allergens
 
 
+def _extract_problem_allergen_notations(record: JsonObject) -> list[str]:
+    """Extract controlled FSA allergen notations from every problem."""
+    notations: list[str] = []
+
+    for raw_problem in _as_list(record.get("problem"), "problem"):
+        problem = _as_object(raw_problem, "problem item")
+
+        for raw_allergen in _as_list(problem.get("allergen"), "problem.allergen"):
+            allergen = _as_object(raw_allergen, "problem.allergen item")
+            notation = _english_text(allergen.get("notation"))
+
+            if notation is not None:
+                notations.append(notation)
+
+    return notations
+
+
+def _extract_reporting_business(record: JsonObject) -> str | None:
+    """Extract the FSA reporting business name when present."""
+    raw_business = record.get("reportingBusiness")
+
+    if raw_business is None:
+        return None
+
+    business = _as_object(raw_business, "reportingBusiness")
+    return _english_text(business.get("commonName"))
+
+
+def _extract_other_businesses(record: JsonObject) -> list[str]:
+    """Extract other businesses named in the FSA alert."""
+    businesses: list[str] = []
+    raw_businesses = record.get("otherBusiness")
+
+    if raw_businesses is None:
+        return businesses
+
+    # The FSA API represents this optional field as either one object or a list.
+    # Normalise both valid shapes before parsing the individual business records.
+    if isinstance(raw_businesses, dict):
+        business_records: list[object] = [raw_businesses]
+    else:
+        business_records = _as_list(raw_businesses, "otherBusiness")
+
+    for raw_business in business_records:
+        business = _as_object(raw_business, "otherBusiness item")
+        name = _english_text(business.get("commonName"))
+
+        if name is not None:
+            businesses.append(name)
+
+    return businesses
+
+
+def _extract_batches(record: JsonObject) -> list[AlertBatch]:
+    """Extract batch details attached to each recalled product."""
+    batches: list[AlertBatch] = []
+
+    for raw_product_detail in _as_list(record.get("productDetails"), "productDetails"):
+        product_detail = _as_object(raw_product_detail, "productDetails item")
+        product_name = _english_text(product_detail.get("productName"))
+
+        for raw_batch in _as_list(
+            product_detail.get("batchDescription"),
+            "productDetails.batchDescription",
+        ):
+            batch = _as_object(raw_batch, "batchDescription item")
+
+            batches.append(
+                AlertBatch(
+                    product_name=product_name,
+                    batch_code=_english_text(batch.get("batchCode")),
+                    lot_number=_english_text(batch.get("lotNumber")),
+                    use_by_description=_english_text(batch.get("useByDescription")),
+                    best_before_description=_english_text(batch.get("bestBeforeDescription")),
+                )
+            )
+
+    return batches
+
+
 def _extract_products(record: JsonObject) -> list[str]:
     """Extract all affected product names from an FSA alert."""
     products: list[str] = []
@@ -156,6 +236,10 @@ def _parse_alert(record: JsonObject) -> Alert:
         alert_url=_english_text(record.get("alertURL")),
         allergens=_extract_problem_allergens(record),
         products=_extract_products(record),
+        reporting_business=_extract_reporting_business(record),
+        other_businesses=_extract_other_businesses(record),
+        allergen_notations=_extract_problem_allergen_notations(record),
+        batches=_extract_batches(record),
     )
 
 

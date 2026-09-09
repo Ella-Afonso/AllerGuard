@@ -135,18 +135,12 @@ def list_seen_versions(
                 raise ValueError("Alert ledger item is missing its alert version key.")
 
             try:
-                modified_datetime = datetime.fromisoformat(
-                    modified.replace("Z", "+00:00")
-                )
+                modified_datetime = datetime.fromisoformat(modified.replace("Z", "+00:00"))
             except ValueError as error:
-                raise ValueError(
-                    "Alert ledger item has an invalid modified timestamp."
-                ) from error
+                raise ValueError("Alert ledger item has an invalid modified timestamp.") from error
 
             if modified_datetime.tzinfo is None:
-                raise ValueError(
-                    "Alert ledger modified timestamps must include a timezone."
-                )
+                raise ValueError("Alert ledger modified timestamps must include a timezone.")
 
             seen_versions.append(
                 SeenAlertVersion(
