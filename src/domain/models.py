@@ -51,3 +51,10 @@ class BusinessProfile(BaseModel):
     name: str
     inventory: list[InventoryItem]
     handled_allergens: list[str] = Field(default_factory=list)
+
+
+class SeenAlertVersion(BaseModel):
+    """One exact FSA alert version that has completed downstream processing."""
+
+    alert_id: str
+    modified: datetime
