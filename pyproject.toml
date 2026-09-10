@@ -36,3 +36,4 @@ warn_unused_ignores = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = ["live_bedrock: explicit opt-in integration tests that call Amazon Bedrock"]

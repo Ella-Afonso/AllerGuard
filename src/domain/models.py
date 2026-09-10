@@ -6,7 +6,7 @@ from datetime import date, datetime
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class AlertType(StrEnum):
@@ -117,11 +117,22 @@ class SeenAlertVersion(BaseModel):
 class MatchCandidate(BaseModel):
     """One plausible alert-to-inventory connection."""
 
+    candidate_id: str = ""
     dimension: MatchDimension
     inventory_item_name: str | None
     alert_span: str
     fuzzy: bool = False
     evidence: str
+
+
+class MatcherProposal(BaseModel):
+    """Untrusted model judgement; authoritative evidence stays in application code."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    proposed_tier: ConfidenceTier
+    reason: str = Field(min_length=1, max_length=600)
+    evidence_refs: list[str]
 
 
 class MatchResult(BaseModel):

@@ -3,55 +3,8 @@
 from __future__ import annotations
 
 from src.config import Settings
-from src.domain.models import BusinessProfile, InventoryItem
+from src.domain.demo_cafe import build_demo_profile
 from src.tools.inventory import ensure_business_table, seed_business
-
-
-def build_demo_profile() -> BusinessProfile:
-    """Return the fictional café profile used by the replay demonstration."""
-    return BusinessProfile(
-        business_id="demo-cafe",
-        name="The Walnut & Whisk Café (fictional demo)",
-        handled_allergens=[
-            "cereals containing gluten",
-            "eggs",
-            "milk",
-            "mustard",
-            "tree nuts",
-        ],
-        inventory=[
-            InventoryItem(
-                name="Walnut brownie",
-                kind="product",
-                ingredients=[
-                    "walnut",
-                    "wheat flour",
-                    "egg",
-                    "milk",
-                ],
-                allergens=[
-                    "cereals containing gluten",
-                    "eggs",
-                    "milk",
-                    "tree nuts",
-                ],
-                brand="Walnut & Whisk",
-                supplier="Fictional Bakery Supplier",
-            ),
-            InventoryItem(
-                name="Doritos Chilli Heatwave",
-                kind="product",
-                ingredients=[
-                    "maize",
-                    "seasoning",
-                    "milk",
-                ],
-                allergens=["milk"],
-                brand="PepsiCo",
-                supplier=None,
-            ),
-        ],
-    )
 
 
 def main() -> None:

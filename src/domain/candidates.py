@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import re
 from difflib import SequenceMatcher
 
-from src.domain.allergens import canonical_allergen
+from src.domain.allergens import ALLERGEN_ALIASES, canonical_allergen
 from src.domain.models import (
     Alert,
     BusinessProfile,
@@ -76,7 +77,12 @@ def _append_candidate(
         evidence=evidence,
     )
 
-    if candidate not in candidates:
+    if not any(
+        existing.model_dump(exclude={"candidate_id"})
+        == candidate.model_dump(exclude={"candidate_id"})
+        for existing in candidates
+    ):
+        candidate.candidate_id = f"C{len(candidates) + 1:02d}"
         candidates.append(candidate)
 
 
@@ -200,7 +206,18 @@ def generate_candidates(
                     evidence="The alert text contains a recorded inventory category.",
                 )
 
-    alert_ids = alert_allergen_ids(alert)
+    alert_ids = set(alert_allergen_ids(alert))
+    # Capture precautionary allergen wording when structured FSA labels are absent.
+    # A newline may continue the allergen list; later sentences do not.
+    for sentence in re.split(r"[.!?;]", f"{alert.title}. {alert.description or ''}"):
+        normalised = normalise_text(sentence)
+        if "may contain " in normalised:
+            precaution = f" {normalised.split('may contain ', 1)[1]} "
+            alert_ids.update(
+                allergen.value
+                for alias, allergen in ALLERGEN_ALIASES.items()
+                if f" {alias} " in precaution
+            )
     matching_ids = alert_ids & profile_allergen_ids(profile)
 
     for allergen_id in sorted(matching_ids):

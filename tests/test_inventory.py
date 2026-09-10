@@ -8,7 +8,8 @@ import pytest
 from moto import mock_aws
 
 from src.config import Settings
-from src.domain.models import BusinessProfile, InventoryItem
+from src.domain.demo_cafe import build_demo_profile
+from src.domain.models import BusinessProfile
 from src.tools.inventory import ensure_business_table, get_business, seed_business
 
 
@@ -43,50 +44,8 @@ def inventory_settings(
 
 
 def _demo_profile() -> BusinessProfile:
-    """Build the same fictional profile used by the seed script."""
-    return BusinessProfile(
-        business_id="demo-cafe",
-        name="The Walnut & Whisk Café (fictional demo)",
-        handled_allergens=[
-            "cereals containing gluten",
-            "eggs",
-            "milk",
-            "mustard",
-            "tree nuts",
-        ],
-        inventory=[
-            InventoryItem(
-                name="Walnut brownie",
-                kind="product",
-                ingredients=[
-                    "walnut",
-                    "wheat flour",
-                    "egg",
-                    "milk",
-                ],
-                allergens=[
-                    "cereals containing gluten",
-                    "eggs",
-                    "milk",
-                    "tree nuts",
-                ],
-                brand="Walnut & Whisk",
-                supplier="Fictional Bakery Supplier",
-            ),
-            InventoryItem(
-                name="Doritos Chilli Heatwave",
-                kind="product",
-                ingredients=[
-                    "maize",
-                    "seasoning",
-                    "milk",
-                ],
-                allergens=["milk"],
-                brand="PepsiCo",
-                supplier=None,
-            ),
-        ],
-    )
+    """Use the canonical fictional café; this module must not redefine inventory."""
+    return build_demo_profile()
 
 
 def test_business_round_trip_preserves_the_full_typed_profile(

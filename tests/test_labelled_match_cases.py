@@ -7,7 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from src.domain.models import Alert, BusinessProfile, ConfidenceTier, InventoryItem
+from src.domain.demo_cafe import build_demo_profile
+from src.domain.models import Alert, BusinessProfile, ConfidenceTier
 from src.domain.tiers import TIER_RANK, deterministic_floor
 from src.tools import fsa_api
 from tests.labelled_match_cases import (
@@ -32,35 +33,8 @@ def _fixture_alert(fixture_name: str) -> Alert:
 
 
 def _demo_profile() -> BusinessProfile:
-    """Return the fictional café inventory used by the replay demonstration."""
-    return BusinessProfile(
-        business_id="demo-cafe",
-        name="The Walnut & Whisk Café (fictional demo)",
-        handled_allergens=[
-            "cereals containing gluten",
-            "eggs",
-            "milk",
-            "mustard",
-            "tree nuts",
-        ],
-        inventory=[
-            InventoryItem(
-                name="Walnut brownie",
-                kind="product",
-                ingredients=["walnut", "wheat flour", "egg", "milk"],
-                allergens=["cereals containing gluten", "eggs", "milk", "tree nuts"],
-                brand="Walnut & Whisk",
-                supplier="Fictional Bakery Supplier",
-            ),
-            InventoryItem(
-                name="Doritos Chilli Heatwave",
-                kind="product",
-                ingredients=["maize", "seasoning", "milk"],
-                allergens=["milk"],
-                brand="PepsiCo",
-            ),
-        ],
-    )
+    """Return the single canonical fictional café used by replay matching tests."""
+    return build_demo_profile()
 
 
 @pytest.mark.parametrize(
@@ -74,6 +48,8 @@ def test_relevant_real_fixture_is_never_no_match(case: RelevantFixtureCase) -> N
 
     assert result.tier is not ConfidenceTier.NO_MATCH
     assert TIER_RANK[result.tier] >= TIER_RANK[case.minimum_tier]
+    if case.fixture_name == "match_confirmed":
+        assert result.tier is ConfidenceTier.POSSIBLE
 
 
 @pytest.mark.parametrize("fixture_name", IRRELEVANT_FIXTURE_NAMES)

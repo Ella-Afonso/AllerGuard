@@ -5,6 +5,7 @@ from __future__ import annotations
 from src.domain.candidates import generate_candidates
 from src.domain.models import (
     Alert,
+    AlertBatch,
     BusinessProfile,
     ConfidenceTier,
     MatchCandidate,
@@ -46,31 +47,53 @@ def _exact_product_items(
     ]
 
 
-def _alert_batch_codes(alert: Alert) -> set[str]:
-    return {
-        normalise_text(value)
-        for batch in alert.batches
-        for value in [batch.batch_code, batch.lot_number]
-        if value
-    }
+def _normalised_product_name(value: str) -> str:
+    return normalise_text(value.removeprefix("Name:"))
 
 
-def _has_known_batch_intersection(
+def _batch_code_values(batch: AlertBatch) -> list[str]:
+    return [value for value in [batch.batch_code, batch.lot_number] if value]
+
+
+def _batch_matches_item(
+    batch: AlertBatch,
+    item_name: str,
+    exact_item_names: list[str],
+    alert_products: list[str],
+) -> bool:
+    """A batch counts only when it is associated with the matched product.
+
+    An unlabelled batch on a multi-product alert is ambiguous, not confirming.
+    """
+    if not batch.product_name:
+        return len(exact_item_names) == 1 and len(alert_products) == 1
+    batch_product = _normalised_product_name(batch.product_name)
+    return batch_product == normalise_text(item_name)
+
+
+def has_known_batch_intersection(
     alert: Alert,
     profile: BusinessProfile,
     item_names: list[str],
 ) -> bool:
-    alert_codes = _alert_batch_codes(alert)
-
-    if not alert_codes:
-        return False
+    """Return whether recorded stock batches intersect the same product's batch codes."""
+    exact_items = [item for item in profile.inventory if item.name in item_names]
 
     return any(
-        normalise_text(batch_code) in alert_codes
-        for item in profile.inventory
-        if item.name in item_names
-        for batch_code in item.batch_codes
+        normalise_text(batch_code) in {normalise_text(code) for code in item.batch_codes}
+        for batch in alert.batches
+        for batch_code in _batch_code_values(batch)
+        for item in exact_items
+        if _batch_matches_item(batch, item.name, item_names, alert.products)
     )
+
+
+def has_recorded_batch_for_items(
+    profile: BusinessProfile,
+    item_names: list[str],
+) -> bool:
+    """Return whether the inventory records any batch code for the matched items."""
+    return any(item.batch_codes for item in profile.inventory if item.name in item_names)
 
 
 def _strong_ingredient_or_supplier_link(
@@ -142,7 +165,7 @@ def deterministic_floor(
 
     A future Matcher model may raise this tier, but must never lower it.
     """
-    resolved_candidates = candidates or generate_candidates(alert, profile)
+    resolved_candidates = generate_candidates(alert, profile) if candidates is None else candidates
 
     if not resolved_candidates:
         return _result(
@@ -159,7 +182,7 @@ def deterministic_floor(
     exact_items = _exact_product_items(alert, profile)
 
     if exact_items:
-        if not is_batch_limited(alert) or _has_known_batch_intersection(
+        if not is_batch_limited(alert) or has_known_batch_intersection(
             alert,
             profile,
             exact_items,
@@ -180,8 +203,9 @@ def deterministic_floor(
             profile=profile,
             tier=ConfidenceTier.LIKELY,
             reason=(
-                f"You stock {', '.join(exact_items)}, but the recall is "
-                "batch-limited and your recorded stock batch is unknown."
+                f"You stock {', '.join(exact_items)}, but the available batch "
+                "and date information does not establish whether your stock "
+                "falls within this batch-limited recall."
             ),
             candidates=resolved_candidates,
         )
