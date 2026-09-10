@@ -79,6 +79,10 @@ def _print_persisted_summary(rows: list[AuditEntry], heading: str) -> AuditRepor
     print(f"  silent decision events:             {summary.silent_decision_events}")
     print(f"  requires-review decision events:    {summary.escalation_decision_events}")
     print(f"  assessment error events:            {summary.error_events}")
+    print(
+        "  Completed decision counts exclude assessment errors. Errors also require "
+        "review. These are historical audit counts, not pending inbox items."
+    )
     return summary
 
 
@@ -102,6 +106,10 @@ def run_demo(
     pass_summaries: list[AuditReportSummary] = []
     for run in range(repeat):
         print(f"\nPASS {run + 1}")
+        if scenario == "failure" and run == 0:
+            print("EXPECTED SIMULATION: forcing a matcher failure to verify safe handling.")
+        if scenario == "failure" and run == 1:
+            print("RETRY: attempting assessment again; the earlier error remains in history.")
         for alert in alerts:
             assessor: AssessmentFunction | None = None if live else _offline_assessor
             if scenario == "failure" and run == 0:
