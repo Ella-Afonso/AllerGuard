@@ -6,6 +6,8 @@ import os
 
 import pytest
 
+from tests.audit_support import audit_settings  # noqa: F401 -- shared pytest fixture
+
 
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     """Do not contact Bedrock without the explicit test-run environment flag."""

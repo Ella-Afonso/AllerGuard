@@ -12,6 +12,7 @@ DEFAULT_AWS_REGION = "eu-west-2"
 DEFAULT_BEDROCK_MODEL_ID = "eu.anthropic.claude-sonnet-4-5-20250929-v1:0"
 DEFAULT_DYNAMODB_TABLE_BUSINESSES = "allerguard-businesses"
 DEFAULT_DYNAMODB_TABLE_ALERTS_SEEN = "allerguard-alerts-seen"
+DEFAULT_DYNAMODB_TABLE_AUDIT = "allerguard-audit"
 
 DEFAULT_FSA_MODE: Literal["live", "replay"] = "replay"
 DEFAULT_FSA_BASE_URI = "https://data.food.gov.uk/food-alerts"
@@ -50,6 +51,7 @@ class Settings(BaseModel):
         default=DEFAULT_DYNAMODB_TABLE_ALERTS_SEEN,
         min_length=1,
     )
+    dynamodb_table_audit: str = Field(default=DEFAULT_DYNAMODB_TABLE_AUDIT, min_length=1)
 
     fsa_mode: Literal["live", "replay"] = DEFAULT_FSA_MODE
     fsa_base_uri: str = Field(default=DEFAULT_FSA_BASE_URI, min_length=1)
@@ -74,6 +76,9 @@ class Settings(BaseModel):
             dynamodb_table_alerts_seen=os.environ.get(
                 "ALLERGUARD_DYNAMODB_TABLE_ALERTS_SEEN",
                 DEFAULT_DYNAMODB_TABLE_ALERTS_SEEN,
+            ),
+            dynamodb_table_audit=os.environ.get(
+                "ALLERGUARD_DYNAMODB_TABLE_AUDIT", DEFAULT_DYNAMODB_TABLE_AUDIT
             ),
             fsa_mode=_read_fsa_mode(),
             fsa_base_uri=os.environ.get(

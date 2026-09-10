@@ -13,6 +13,7 @@ dist/
 .coverage
 .coverage.*
 htmlcov/
+/artifacts/
 
 # Local configuration and secrets
 .env
