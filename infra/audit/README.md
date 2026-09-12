@@ -1,6 +1,6 @@
-# Audit table — operator guide (Step 8)
+# Audit table — operator guide
 
-Step 8 adds a deterministic gate and a durable audit boundary. It does **not**
+The audit integration adds a deterministic gate and a durable audit boundary. It does **not**
 deploy the supervisor, send notifications, record approvals, advance the poll
 watermark, or perform any human action on behalf of the owner.
 
@@ -21,7 +21,7 @@ permissions; it does not substitute for live read/write checks.)
 | Verified | Not verified |
 |---|---|
 | Table provisioned and reachable | Live `process_alert` → DynamoDB end-to-end |
-| Runtime IAM attached to a dedicated verification role | Step 8 live Bedrock end-to-end run |
+| Runtime IAM attached to a dedicated verification role | Live Bedrock end-to-end run |
 | Synthetic append/read via audit tools | AgentCore production deployment |
 | Duplicate `PutItem` protection (`created=false` on reuse) | Supervisor, notification, approval, watermark |
 | Separate-process read-back of persisted rows | Tamper-proof / WORM storage |
@@ -201,11 +201,11 @@ No AWS calls; uses injected proposals and ephemeral in-memory storage:
 Records disappear when the process exits. The HTML report is a read-only snapshot
 from `list_audit_entries`; it is not an approval interface.
 
-## Live demonstration (Bedrock + DynamoDB — not Step 8 verified)
+## Live demonstration (Bedrock + DynamoDB — not verified end-to-end)
 
 The `--live` demo path invokes real Bedrock and writes persistent DynamoDB rows via
-the demo script. It is **not** the same as the verified Step 8 audit-tool checks
-above: Step 8 live Bedrock end-to-end has **not** been run. Requires AWS credits;
+the demo script. It is **not** the same as the verified audit-tool checks
+above: Live Bedrock end-to-end has **not** been run. Requires AWS credits;
 create the table with `ensure_audit_table()` first, or pass `--create-table`:
 
 ```powershell
@@ -221,10 +221,10 @@ All demo and test data is fictional or public (OGL-licensed FSA fixtures). The
 demo business **The Walnut & Whisk Café** is synthetic. No real personal, health,
 or business data belongs in this table.
 
-## What Step 8 does not include
+## What the audit verification does not include
 
 - Live `process_alert` on real DynamoDB (verified offline + audit tools only)
-- Step 8 live Bedrock end-to-end verification
+- Live Bedrock end-to-end verification
 - AgentCore production deployment of the audit runtime role
 - Approval queue or owner decisions
 - SES/SNS notification or delivery guarantees

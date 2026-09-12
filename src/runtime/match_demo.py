@@ -71,7 +71,9 @@ def main() -> int:
         result = match_alert(alert, profile, injected_proposal=proposal)
     except MatcherError as error:
         print(f"\nASSESSMENT REJECTED | {type(error).__name__}\n{error}")
-        print("No successful match result. Human-review routing belongs to the next step.")
+        print(
+            "No successful match result. Use the alert-processing runtime for human-review routing."
+        )
         return 1
     print(f"\nFinal assessment: {result.tier.value}")
     if proposal and result.tier != proposal.proposed_tier:

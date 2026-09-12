@@ -148,6 +148,54 @@ class MatchResult(BaseModel):
     candidates: list[MatchCandidate]
 
 
+class ActionPack(BaseModel):
+    """Owner-facing drafts; never a sent or approved action."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, str_strip_whitespace=True)
+
+    pull: str = Field(min_length=1, max_length=800)
+    staff_note: str = Field(min_length=1, max_length=800)
+    customer_notice: str = Field(min_length=1, max_length=800)
+    substitution: str = Field(min_length=1, max_length=800)
+
+
+class ActionPackProposal(BaseModel):
+    """Untrusted Drafter output; application code validates before queueing."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    pull: str = Field(min_length=1, max_length=800)
+    staff_note: str = Field(min_length=1, max_length=800)
+    customer_notice: str = Field(min_length=1, max_length=800)
+    substitution: str = Field(min_length=1, max_length=800)
+
+
+class DraftSource(StrEnum):
+    """Whether the queued pack came from the model or a conservative fallback."""
+
+    MODEL = "model"
+    FALLBACK = "fallback"
+
+
+class ActionDraftResult(BaseModel):
+    """Accepted pack plus exact draft provenance; never a sent action."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    action_pack: ActionPack
+    draft_source: DraftSource
+    drafter_model_id: str = Field(min_length=1)
+
+
+class EscalationStatus(StrEnum):
+    """Queue lifecycle. New queue rows are always pending."""
+
+    PENDING = "pending"
+    APPROVED = "approved"
+    EDITED = "edited"
+    DECLINED = "declined"
+
+
 class GateDecision(StrEnum):
     """Whether an assessment needs a human decision; not proof of notification."""
 
@@ -160,6 +208,11 @@ class AuditEvent(StrEnum):
 
     MATCH_DECISION = "match_decision"
     MATCH_ERROR = "match_error"
+    ESCALATION_QUEUED = "escalation_queued"
+    NOTIFICATION_SENT = "notification_sent"
+    NOTIFICATION_FAILED = "notification_failed"
+    NOTIFICATION_UNKNOWN = "notification_unknown"
+    DECISION_RECORDED = "decision_recorded"
 
 
 class AssessmentMode(StrEnum):
@@ -167,6 +220,212 @@ class AssessmentMode(StrEnum):
 
     BEDROCK = "bedrock"
     INJECTED = "injected"
+
+
+class Escalation(BaseModel):
+    """One pending human decision: drafts stored, not executed."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    escalation_id: str = Field(pattern=r"^[0-9a-f]{64}$")
+    business_id: str = Field(min_length=1)
+    assessment_id: str = Field(pattern=r"^[0-9a-f]{64}$")
+    alert_id: str = Field(min_length=1)
+    alert_modified: AwareDatetime
+    alert_title: str = Field(min_length=1)
+    source_url: str = Field(min_length=1)
+    status: EscalationStatus
+    tier: ConfidenceTier | None
+    floor_tier: ConfidenceTier | None
+    reason: str = Field(min_length=1)
+    action_pack: ActionPack
+    draft_source: DraftSource
+    policy_version: str = Field(min_length=1)
+    draft_policy_version: str = Field(min_length=1)
+    drafter_model_id: str = Field(min_length=1)
+    queued_at: AwareDatetime
+
+    @field_validator("alert_modified", "queued_at")
+    @classmethod
+    def normalise_time(cls, value: datetime) -> datetime:
+        """Equivalent instants have one UTC representation."""
+        return value.astimezone(UTC)
+
+    @model_validator(mode="after")
+    def consistent_queue_row(self) -> Self:
+        """Queue rows are pending, keyed by assessment, and never invent a tier."""
+        if self.escalation_id != self.assessment_id:
+            raise ValueError("escalation_id must equal assessment_id.")
+        if self.status is not EscalationStatus.PENDING:
+            raise ValueError("New escalations must be pending.")
+        if self.tier is None:
+            if self.draft_source is not DraftSource.FALLBACK:
+                raise ValueError("An escalation without a tier must use the fallback pack.")
+            if self.floor_tier is not None:
+                raise ValueError("An escalation without a tier must not invent a floor.")
+        elif self.floor_tier is None:
+            raise ValueError("An assessed escalation needs both tiers.")
+        else:
+            ranks = {tier: rank for rank, tier in enumerate(ConfidenceTier)}
+            if ranks[self.tier] < ranks[self.floor_tier]:
+                raise ValueError("Escalation tier cannot be lower than its floor.")
+        return self
+
+
+class EscalationAppendResult(BaseModel):
+    """The persisted first queue row, and whether this caller inserted it."""
+
+    model_config = ConfigDict(frozen=True)
+    escalation: Escalation
+    created: bool
+
+
+class OwnerDecision(StrEnum):
+    """An explicit owner choice; never a model's escalation decision."""
+
+    APPROVE = "approve"
+    EDIT = "edit"
+    DECLINE = "decline"
+
+
+class DecisionRecord(BaseModel):
+    """The first owner choice and both pack versions, without executing either."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, str_strip_whitespace=True)
+
+    business_id: str = Field(min_length=1)
+    escalation_id: str = Field(pattern=r"^[0-9a-f]{64}$")
+    assessment_id: str = Field(pattern=r"^[0-9a-f]{64}$")
+    decision: OwnerDecision
+    decided_at: AwareDatetime
+    original_action_pack: ActionPack
+    edited_pack: ActionPack | None = None
+
+    @field_validator("decided_at")
+    @classmethod
+    def normalise_time(cls, value: datetime) -> datetime:
+        return value.astimezone(UTC)
+
+    @field_validator("original_action_pack", "edited_pack", mode="before")
+    @classmethod
+    def revalidate_pack(cls, value: object) -> ActionPack | None:
+        if value is None:
+            return None
+        raw = value.model_dump() if isinstance(value, ActionPack) else value
+        return ActionPack.model_validate(raw)
+
+    @model_validator(mode="after")
+    def consistent_choice(self) -> Self:
+        if self.escalation_id != self.assessment_id:
+            raise ValueError("Decision IDs must share one assessment.")
+        if (self.decision is OwnerDecision.EDIT) != (self.edited_pack is not None):
+            raise ValueError("Only EDIT requires an edited pack; APPROVE/DECLINE forbid one.")
+        return self
+
+
+class EscalationView(BaseModel):
+    """Current status projected from immutable queue and decision facts."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    escalation: Escalation
+    decision_record: DecisionRecord | None = None
+
+    @model_validator(mode="after")
+    def consistent_identity(self) -> Self:
+        record = self.decision_record
+        if record is not None:
+            if (
+                record.business_id != self.escalation.business_id
+                or record.escalation_id != self.escalation.escalation_id
+                or record.original_action_pack != self.escalation.action_pack
+                or record.decided_at < self.escalation.queued_at
+            ):
+                raise ValueError("Decision does not match the original queue fact.")
+        return self
+
+    @property
+    def effective_status(self) -> EscalationStatus:
+        if self.decision_record is None:
+            return EscalationStatus.PENDING
+        return {
+            OwnerDecision.APPROVE: EscalationStatus.APPROVED,
+            OwnerDecision.EDIT: EscalationStatus.EDITED,
+            OwnerDecision.DECLINE: EscalationStatus.DECLINED,
+        }[self.decision_record.decision]
+
+
+class NotificationOutcome(StrEnum):
+    DISABLED = "disabled"
+    ACCEPTED = "accepted"
+    FAILED = "failed"
+    UNKNOWN = "unknown"
+
+
+class NotificationMode(StrEnum):
+    LIVE = "live"
+    SIMULATED = "simulated"
+    DISABLED = "disabled"
+
+
+class NotificationProvider(StrEnum):
+    SES = "ses"
+    SNS = "sns"
+    LOG = "log"
+    STUB = "stub"
+    NONE = "none"
+
+
+class NotificationReceipt(BaseModel):
+    """Provider acceptance is distinct from delivery to an owner's inbox."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, str_strip_whitespace=True)
+    business_id: str = Field(min_length=1)
+    escalation_id: str = Field(pattern=r"^[0-9a-f]{64}$")
+    outcome: NotificationOutcome
+    provider: NotificationProvider
+    mode: NotificationMode
+    attempted_at: AwareDatetime | None = None
+    message_id: str | None = Field(default=None, min_length=1, max_length=200)
+    failure_type: str | None = Field(default=None, pattern=r"^[A-Za-z][A-Za-z0-9_]{0,79}$")
+
+    @field_validator("attempted_at")
+    @classmethod
+    def normalise_time(cls, value: datetime | None) -> datetime | None:
+        return None if value is None else value.astimezone(UTC)
+
+    @model_validator(mode="after")
+    def truthful_outcome(self) -> Self:
+        if self.outcome is NotificationOutcome.DISABLED:
+            if (
+                self.mode is not NotificationMode.DISABLED
+                or self.provider is not NotificationProvider.NONE
+                or any(
+                    v is not None for v in (self.attempted_at, self.message_id, self.failure_type)
+                )
+            ):
+                raise ValueError("Disabled notification cannot claim an attempt.")
+            return self
+        if self.attempted_at is None or self.mode is NotificationMode.DISABLED:
+            raise ValueError("Attempted notification requires time and execution mode.")
+        allowed = (
+            {NotificationProvider.STUB}
+            if self.mode is NotificationMode.SIMULATED
+            else {NotificationProvider.SES, NotificationProvider.SNS, NotificationProvider.LOG}
+        )
+        if self.provider not in allowed:
+            raise ValueError("Notification provider contradicts its execution mode.")
+        if self.outcome is NotificationOutcome.ACCEPTED:
+            if (
+                not self.message_id
+                or self.failure_type
+                or self.provider is NotificationProvider.LOG
+            ):
+                raise ValueError("Acceptance requires a provider message ID and no failure.")
+        elif self.message_id is not None or not self.failure_type:
+            raise ValueError(
+                "Failed/unknown notification requires failure evidence and no message ID."
+            )
+        return self
 
 
 class AuditEntry(BaseModel):
@@ -193,6 +452,9 @@ class AuditEntry(BaseModel):
     mode: AssessmentMode
     candidate_ids: tuple[str, ...] = ()
     matched_items: tuple[str, ...] = ()
+    draft_source: DraftSource | None = None
+    notification: NotificationReceipt | None = None
+    owner_decision: DecisionRecord | None = None
 
     @field_validator("timestamp", "alert_modified")
     @classmethod
@@ -205,12 +467,25 @@ class AuditEntry(BaseModel):
         """Reject contradictory records before they can enter the audit store."""
         if self.entry_id != f"{self.assessment_id}#{self.event.value}":
             raise ValueError("entry_id must identify the assessment and event.")
+        notification_events = {
+            AuditEvent.NOTIFICATION_SENT,
+            AuditEvent.NOTIFICATION_FAILED,
+            AuditEvent.NOTIFICATION_UNKNOWN,
+        }
+        if self.event not in notification_events and self.notification is not None:
+            raise ValueError("Only notification events may retain notification evidence.")
+        if self.event is not AuditEvent.DECISION_RECORDED and self.owner_decision is not None:
+            raise ValueError("Only owner decision events may retain an owner choice.")
         if self.event is AuditEvent.MATCH_ERROR:
+            if self.draft_source is not None:
+                raise ValueError("A match event must not record a draft source.")
             if self.tier is not None or self.floor_tier is not None:
                 raise ValueError("An assessment error must not invent a tier.")
             if self.decision is not GateDecision.ESCALATE or not self.error_type:
                 raise ValueError("An assessment error must escalate with an error type.")
-        else:
+        elif self.event is AuditEvent.MATCH_DECISION:
+            if self.draft_source is not None:
+                raise ValueError("A match event must not record a draft source.")
             if self.tier is None or self.floor_tier is None or self.error_type is not None:
                 raise ValueError("A match decision needs tiers and no error type.")
             expected = (
@@ -223,6 +498,56 @@ class AuditEntry(BaseModel):
             ranks = {tier: rank for rank, tier in enumerate(ConfidenceTier)}
             if ranks[self.tier] < ranks[self.floor_tier]:
                 raise ValueError("Audit tier cannot be lower than its floor.")
+        elif self.event is AuditEvent.ESCALATION_QUEUED:
+            if self.draft_source is None:
+                raise ValueError("A queued escalation must record a draft source.")
+            if self.decision is not GateDecision.ESCALATE:
+                raise ValueError("A queued escalation must escalate.")
+            if self.tier is None and self.floor_tier is None:
+                if not self.error_type:
+                    raise ValueError("An assessment error must escalate with an error type.")
+            elif self.tier is None or self.floor_tier is None or self.error_type is not None:
+                raise ValueError("A queued escalation cannot invent a partial or mixed tier.")
+            else:
+                if self.tier is ConfidenceTier.NO_MATCH:
+                    raise ValueError("A queued escalation cannot record a NO_MATCH tier.")
+                ranks = {tier: rank for rank, tier in enumerate(ConfidenceTier)}
+                if ranks[self.tier] < ranks[self.floor_tier]:
+                    raise ValueError("Audit tier cannot be lower than its floor.")
+        else:
+            # Validate the original escalation evidence without treating the new
+            # event as a new assessment or changing its matcher error/tier.
+            queued = self.model_dump(mode="python")
+            queued.update(
+                event=AuditEvent.ESCALATION_QUEUED,
+                entry_id=f"{self.assessment_id}#escalation_queued",
+                notification=None,
+                owner_decision=None,
+            )
+            AuditEntry.model_validate(queued)
+            if self.event in notification_events:
+                receipt = self.notification
+                expected_outcome = {
+                    AuditEvent.NOTIFICATION_SENT: NotificationOutcome.ACCEPTED,
+                    AuditEvent.NOTIFICATION_FAILED: NotificationOutcome.FAILED,
+                    AuditEvent.NOTIFICATION_UNKNOWN: NotificationOutcome.UNKNOWN,
+                }[self.event]
+                if receipt is None or receipt.outcome is not expected_outcome:
+                    raise ValueError("Notification event requires matching outcome evidence.")
+                if (
+                    receipt.business_id != self.business_id
+                    or receipt.escalation_id != self.assessment_id
+                    or receipt.attempted_at != self.timestamp
+                ):
+                    raise ValueError("Notification identity/time must match its audit event.")
+            elif self.event is AuditEvent.DECISION_RECORDED:
+                record = self.owner_decision
+                if record is None or (
+                    record.business_id != self.business_id
+                    or record.assessment_id != self.assessment_id
+                    or record.decided_at != self.timestamp
+                ):
+                    raise ValueError("Owner decision identity/time must match its audit event.")
         return self
 
 
@@ -234,19 +559,40 @@ class AuditAppendResult(BaseModel):
     created: bool
 
 
+class DecisionAppendResult(BaseModel):
+    """The stored first choice, with acknowledgement of its linked audit."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    record: DecisionRecord
+    created: bool
+    audit: AuditAppendResult
+
+    @model_validator(mode="after")
+    def consistent_record(self) -> Self:
+        if self.audit.entry.event is not AuditEvent.DECISION_RECORDED:
+            raise ValueError("Owner choice requires a decision-recorded audit event.")
+        if self.audit.entry.owner_decision != self.record:
+            raise ValueError("Stored choice and audit must agree.")
+        return self
+
+
 class ProcessedAlert(BaseModel):
     """The acknowledged result of match → gate → audit for one alert.
 
     The final match result is retained for a successful assessment; an
     assessment error has none and never invents one. The gate decision and the
     audit append result are retained so the caller can prove the decision was
-    durably recorded (or that a prior identical record was reused).
+    durably recorded (or that a prior identical record was reused). Escalated
+    receipts also retain the pending queue row and its append-only queued event.
     """
 
     model_config = ConfigDict(frozen=True)
     match_result: MatchResult | None
     decision: GateDecision
     audit: AuditAppendResult
+    escalation: EscalationAppendResult | None = None
+    queue_audit: AuditAppendResult | None = None
+    notification: NotificationReceipt | None = None
 
     @model_validator(mode="after")
     def consistent_with_audit(self) -> Self:
@@ -257,6 +603,25 @@ class ProcessedAlert(BaseModel):
             raise ValueError("match result tier must match the stored audit entry.")
         if self.match_result is None and self.audit.entry.event is not AuditEvent.MATCH_ERROR:
             raise ValueError("only an assessment error has no match result.")
+        if self.decision is GateDecision.SILENT:
+            if (
+                self.escalation is not None
+                or self.queue_audit is not None
+                or self.notification is not None
+            ):
+                raise ValueError("A silent path must not retain a queued escalation.")
+        else:
+            if self.escalation is None or self.queue_audit is None:
+                raise ValueError("An escalated path must retain the queue row and queued audit.")
+            if self.queue_audit.entry.event is not AuditEvent.ESCALATION_QUEUED:
+                raise ValueError("queue_audit must be the escalation_queued event.")
+            if self.queue_audit.entry.assessment_id != self.escalation.escalation.assessment_id:
+                raise ValueError("Queued audit must share the escalation assessment identity.")
+            if self.notification is not None and (
+                self.notification.business_id != self.escalation.escalation.business_id
+                or self.notification.escalation_id != self.escalation.escalation.escalation_id
+            ):
+                raise ValueError("Notification must identify the stored escalation.")
         return self
 
     @property

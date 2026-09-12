@@ -1,4 +1,4 @@
-"""Run real match/gate/audit code: offline Moto by default, AWS only with --live."""
+"""Run real match/gate/queue/audit code: offline Moto by default, AWS only with --live."""
 
 from __future__ import annotations
 
@@ -11,9 +11,12 @@ from unittest.mock import patch
 
 from src.agents.matcher import match_alert
 from src.config import Settings
+from src.domain.action_draft import finalise_action_pack
 from src.domain.demo_cafe import build_demo_profile
 from src.domain.match_judgement import MatcherModelError
 from src.domain.models import (
+    ActionPack,
+    ActionPackProposal,
     Alert,
     AuditEntry,
     AuditEvent,
@@ -22,9 +25,10 @@ from src.domain.models import (
     MatchResult,
 )
 from src.domain.tiers import deterministic_floor
-from src.runtime.process_alert import AssessmentFunction, process_alert
+from src.runtime.process_alert import AssessmentFunction, DrafterFunction, process_alert
 from src.tools.audit import AuditPersistenceError, ensure_audit_table, list_audit_entries
 from src.tools.audit_report import AuditReportSummary, summarize_audit_entries, write_audit_report
+from src.tools.escalation_queue import EscalationPersistenceError, ensure_escalation_table
 from src.tools.fsa_api import load_alerts
 
 SCENARIOS = {
@@ -54,6 +58,20 @@ def _offline_assessor(alert: Alert, business: BusinessProfile) -> MatchResult:
 
 def _failed_assessor(alert: Alert, business: BusinessProfile) -> MatchResult:
     raise MatcherModelError("Explicitly simulated provider failure for the offline demonstration.")
+
+
+def _offline_drafter(alert: Alert, business: BusinessProfile, match: MatchResult) -> ActionPack:
+    """Inject synthetic copy through the real ActionPack finalisation path."""
+    proposal = ActionPackProposal(
+        pull=f"Remove stock linked to {alert.title} from sale and display.",
+        staff_note=f"Do not sell items linked to {alert.title} until checked.",
+        customer_notice=(
+            f"Draft only: we are checking stock against {alert.title}. "
+            "This notice has not been sent."
+        ),
+        substitution="No substitution suggested.",
+    )
+    return finalise_action_pack(proposal, alert, match, business)
 
 
 def _load_scenario_alerts(scenario: str, settings: Settings) -> list[Alert]:
@@ -101,7 +119,10 @@ def run_demo(
     print(f"\nALLERGUARD | AUDITABLE DECISIONS\n{label}\n{'=' * 78}")
     print(f"Business: {profile.name}")
     print(f"Historical FSA replay fixtures | scenario: {scenario}")
-    print("Uses process_alert -> real matcher validation, deterministic gate, audit append.")
+    print(
+        "Uses process_alert -> matcher validation, deterministic gate, "
+        "drafted or fallback action pack, pending queue, audit append."
+    )
     any_failure = False
     pass_summaries: list[AuditReportSummary] = []
     for run in range(repeat):
@@ -112,6 +133,7 @@ def run_demo(
             print("RETRY: attempting assessment again; the earlier error remains in history.")
         for alert in alerts:
             assessor: AssessmentFunction | None = None if live else _offline_assessor
+            drafter: DrafterFunction | None = None if live else _offline_drafter
             if scenario == "failure" and run == 0:
                 assessor = _failed_assessor
             try:
@@ -121,10 +143,15 @@ def run_demo(
                     timestamp=datetime.now(UTC),
                     settings=settings,
                     assessor=assessor,
+                    drafter=drafter,
                 )
             except AuditPersistenceError:
                 any_failure = True
                 print(f"AUDIT UNAVAILABLE | {alert.id} | requires review; NOT acknowledged")
+                continue
+            except EscalationPersistenceError:
+                any_failure = True
+                print(f"QUEUE UNAVAILABLE | {alert.id} | no escalation acknowledged")
                 continue
             entry = outcome.audit.entry
             action = "REUSED" if outcome.reused else "APPENDED"
@@ -153,17 +180,20 @@ def run_demo(
 
     if scenario == "failure" and len(pass_summaries) >= 2:
         rows = list_audit_entries(profile.business_id, settings)
-        if len(rows) >= 2:
+        if len(rows) >= 3:
             error_row = next(row for row in rows if row.event is AuditEvent.MATCH_ERROR)
+            queued_row = next(row for row in rows if row.event is AuditEvent.ESCALATION_QUEUED)
             decision_row = next(row for row in rows if row.event is AuditEvent.MATCH_DECISION)
             print(
-                "\nFAILURE + RECOVERY: two stored events share one assessment identity; "
-                "the historical error row remains after recovery."
+                "\nFAILURE + RECOVERY: three historical audit events can exist after recovery: "
+                "MATCH_ERROR, ESCALATION_QUEUED, and MATCH_DECISION. They share one "
+                "assessment identity. The first queued fallback remains pending."
             )
             print(f"  error event:    {error_row.entry_id}")
+            print(f"  queued event:   {queued_row.entry_id}")
             print(f"  decision event: {decision_row.entry_id}")
             print(f"  assessment_id:  {error_row.assessment_id}")
-            assert error_row.assessment_id == decision_row.assessment_id
+            assert error_row.assessment_id == queued_row.assessment_id == decision_row.assessment_id
 
     rows = list_audit_entries(profile.business_id, settings)
     storage_label = (
@@ -173,7 +203,10 @@ def run_demo(
     )
     saved = write_audit_report(rows, report, storage_label=storage_label)
     print(f"\nEvidence report: {saved}")
-    print("Matching, gate, audit only. No notification, approval, or watermark commit performed.")
+    print(
+        "Matcher, deterministic gate, drafted/fallback action pack, pending queue, and audit. "
+        "No notification, approval, or watermark commit performed."
+    )
     return 1 if any_failure else 0
 
 
@@ -184,7 +217,9 @@ def main() -> int:
         "--live", action="store_true", help="Uses real Bedrock and writes DynamoDB."
     )
     parser.add_argument(
-        "--create-table", action="store_true", help="Explicitly provision audit table."
+        "--create-table",
+        action="store_true",
+        help="Explicitly provision audit and escalation queue tables.",
     )
     parser.add_argument("--repeat", type=int, default=2)
     parser.add_argument("--report", type=Path, default=Path("artifacts/audit-demo.html"))
@@ -197,6 +232,7 @@ def main() -> int:
         settings = Settings.from_environment()
         if args.create_table:
             ensure_audit_table(settings)
+            ensure_escalation_table(settings)
         return run_demo(
             settings, scenario=args.scenario, live=True, repeat=args.repeat, report=args.report
         )
@@ -216,6 +252,7 @@ def main() -> int:
         with mock_aws():
             settings = Settings.from_environment()
             ensure_audit_table(settings)
+            ensure_escalation_table(settings)
             return run_demo(
                 settings, scenario=args.scenario, live=False, repeat=args.repeat, report=args.report
             )

@@ -6,12 +6,15 @@ AllerGuard is an autonomous agent system being developed for small UK food busin
 
 | Area | Verification state |
 |---|---|
-| **Step 7 — Matcher (live Bedrock)** | Verified. Five labelled live fixture tests passed against real Bedrock in `eu-west-2`. This is separate from Step 8 audit storage. |
-| **Step 8 — Gate + audit (offline)** | Verified. Deterministic gate, append-only audit boundary, and `process_alert` seam exercised with Moto and injected proposals (`tests/test_gate.py`, `tests/test_audit.py`, `tests/test_process_alert.py`, `tests/test_audit_demo.py`). |
-| **Step 8 — Offline test suite** | Verified (2026-09-10): **197 passed**, **5 live Bedrock cases intentionally skipped** (`ALLERGUARD_LIVE_BEDROCK` unset), **1 third-party Pydantic warning** (bedrock-agentcore). `ruff check src tests scripts` passed; `ruff format --check src tests scripts` — **65 files** formatted; `mypy src` passed (**40 source files**). |
-| **Step 8 — Live DynamoDB audit-tool verification** | Verified (2026-09-10). Real table `allerguard-audit` in `eu-west-2`; audit-tool append/read, duplicate protection, separate-process persistence, and preservation of synthetic error/recovery events under a scoped assumed runtime role used **only for live verification** — not attached to production compute. Synthetic records only; operator guide in [`infra/audit/README.md`](infra/audit/README.md). |
-| **Step 8 — Not verified on live AWS** | Live `process_alert` → DynamoDB integration, live Bedrock end-to-end execution for Step 8, and AgentCore deployment are **not** verified here. |
-| **Supervisor, approval, notification, Action-Drafter, watermark, dashboard** | **Not implemented.** The spine stops after match → gate → audit. |
+| **Matcher (live Bedrock)** | Verified. Five labelled live fixture tests passed against real Bedrock in `eu-west-2`. This is separate from audit storage. |
+| **Gate + audit (offline)** | Verified. Deterministic gate, append-only audit boundary, and `process_alert` seam exercised with Moto and injected proposals (`tests/test_gate.py`, `tests/test_audit.py`, `tests/test_process_alert.py`, `tests/test_audit_demo.py`). |
+| **Offline test suite baseline** | Verified (2026-09-10): **197 passed**, **5 live Bedrock cases intentionally skipped** (`ALLERGUARD_LIVE_BEDROCK` unset), **1 third-party Pydantic warning** (bedrock-agentcore). |
+| **Current offline suite** | Verified (2026-09-12): **329 passed**, **6 paid Bedrock cases deselected**, **1 third-party Pydantic warning**. Ruff check/format, mypy and diff checks passed. |
+| **Live DynamoDB audit-tool verification** | Verified (2026-09-10). Real table `allerguard-audit` in `eu-west-2`; audit-tool append/read, duplicate protection, separate-process persistence, and preservation of synthetic error/recovery events under a scoped assumed runtime role used **only for live verification** — not attached to production compute. Synthetic records only; operator guide in [`infra/audit/README.md`](infra/audit/README.md). |
+| **Not verified on live AWS** | Live `process_alert` → DynamoDB integration, live Bedrock end-to-end execution for the audit integration, and AgentCore deployment are **not** verified here. |
+| **Action-Drafter and pending queue** | Implemented: validated four-field drafts, explicit model/fallback provenance, conditional first-write-wins queue and queued audit. Offline integration verified; one live Doritos drafter fixture passed separately. Live queue/process_alert integration on DynamoDB has not been verified. |
+| **Owner notification and approval path** | Implemented and offline verified: disabled-by-default notification boundary, SES/SNS provider truth, simulated notification orchestration, immutable approve/edit/decline decisions, read-only CLI, and report labels. No live email or inbox receipt is claimed. |
+| **Supervisor, watermark, dashboard** | **Not implemented.** Production unattended orchestration, watermark commits, and the dashboard remain future work. |
 
 The offline evidence demo runs the real matcher validation path, deterministic
 gate, and audit append code. Its HTML report is a read-only snapshot of stored
@@ -23,7 +26,9 @@ rows — not an approval interface and not proof that an owner was notified.
 Scheduled monitoring
   → inventory matching
   → deterministic escalation gate
+  → owner notification
   → human review
+  → approve / edit / decline
   → append-only audit trail
 ```
 
@@ -107,12 +112,13 @@ python -m mypy src
 python -m pytest
 ```
 
-The verified offline suite result (2026-09-10): **197 passed**, **5 skipped**
-(live Bedrock opt-in only), **1 third-party Pydantic warning**. Live Bedrock
-cases remain opt-in via `ALLERGUARD_LIVE_BEDROCK=1`; Step 7 live matcher
-verification is separate from the default offline run.
+The current verified offline suite result (2026-09-12): **329 passed**, **6 paid
+Bedrock cases deselected**, and **1 third-party Pydantic warning**. Ruff check,
+format check, mypy and diff checks also pass. Live Bedrock cases remain opt-in
+via `ALLERGUARD_LIVE_BEDROCK=1`; Live matcher verification is separate
+from the default offline run.
 
-## Step 8: deterministic gate and append-only audit
+## deterministic gate and append-only audit
 
 ### Verified behaviour (offline)
 
@@ -136,9 +142,10 @@ individual items. A principal with unrestricted `PutItem` could still overwrite
 a row outside this code path.
 
 If audit persistence fails, processing raises `AuditPersistenceError` and cannot
-return a successful receipt. That is not human notification — approval,
-notification, supervisor orchestration, Action-Drafter, and watermark commits
-remain future work.
+return a successful receipt. The runtime also persists a validated drafted/fallback
+action pack and pending escalation. The runtime also adds an explicit owner-notification
+boundary and immutable owner decision records; it does not execute customer or
+stock actions. Supervisor orchestration and watermark commits remain future work.
 
 ### Offline demonstration
 
@@ -171,29 +178,73 @@ From the repository root with `.venv` activated:
 
 | Count | Value |
 |---|---|
-| Stored audit events | 5 |
+| Stored audit events | 8 (5 match decisions + 3 queued events) |
 | Distinct assessments | 5 |
 | Silent decision events | 2 (olives, clover seeds fixtures) |
 | Requires-review decision events | 3 (walnut ≥ POSSIBLE, mustard ≥ POSSIBLE, Doritos ≥ LIKELY) |
 | Assessment error events | 0 |
 
-Pass 2 reuses the same five stored event keys; totals do not increase.
+Pass 2 reuses the same eight stored event keys; totals do not increase.
 
 **Expected persisted counts — failure/recovery scenario (after pass 2):**
 
 | Count | Value |
 |---|---|
-| Stored audit events | 2 |
+| Stored audit events | 3 (error + queued fallback + recovered match decision) |
 | Distinct assessments | 1 |
 | Assessment error events | 1 |
 | Requires-review decision events | 1 |
 
 The original `#match_error` row remains after recovery; recovery adds a separate
-`#match_decision` row for the same assessment identity.
+`#match_decision` row for the same assessment identity. The original queued
+fallback stays pending; recovery does not replace its pack or record an owner choice.
 
 Open the generated HTML under `artifacts/` in a browser. The report lists stored
 audit events and distinct assessments separately — event count is not the number
 of alerts processed, and “requires review” does not mean the owner was notified.
+
+## notification and owner approval path
+
+The owner decision path keeps the original pending queue row immutable. A separate decision row at
+`<assessment_id>#decision` records the first owner choice, while `list` derives
+pending/approved/edited/declined status without rewriting the queue. The local
+operator CLI is:
+
+```powershell
+.\.venv\Scripts\python.exe -m src.runtime.approve --business-id demo-cafe list
+.\.venv\Scripts\python.exe -m src.runtime.approve --business-id demo-cafe show <ESCALATION_ID>
+.\.venv\Scripts\python.exe -m src.runtime.approve --business-id demo-cafe approve <ESCALATION_ID>
+.\.venv\Scripts\python.exe -m src.runtime.approve --business-id demo-cafe decline <ESCALATION_ID>
+.\.venv\Scripts\python.exe -m src.runtime.approve --business-id demo-cafe edit <ESCALATION_ID> --pack-file artifacts/edited-pack.json
+```
+
+Recording a choice stores owner consent and its audit evidence. It does not send
+the draft to customers, remove stock, or execute the action pack. A repeated
+choice reports the stored first choice. Edit files are UTF-8 JSON ActionPacks and
+are revalidated at both the file and persistence boundaries.
+
+Notification is disabled by default. Explicit `ALLERGUARD_NOTIFICATION_MODE=ses`
+uses SES and may use SNS only after a definite SES rejection; `sns` uses the
+configured topic directly. A provider message ID means the provider accepted the
+request, not that an owner received it in an inbox. Timeouts and ambiguous
+transport outcomes are recorded as unknown and are not blindly retried. The
+serial read-before-send check does not promise exactly-once external delivery in
+the face of crashes or concurrent callers.
+
+The reproducible offline human-loop demonstration uses the real `process_alert`
+path, injected matcher/drafter doubles, a simulated provider and one Moto
+process:
+
+```powershell
+.\.venv\Scripts\python.exe -m scripts.demo_human_loop --report artifacts/human-loop.html
+```
+
+It reads back 11 events and 3 pending escalations after the initial simulated
+notifications, leaves those totals unchanged on replay, records one approve,
+one edit and one decline on distinct IDs, then reads back 14 events and zero
+pending. The final replay adds no sends or decisions. This proves the offline
+orchestration and persistence contract only; it is not live SES, SNS, or inbox
+verification.
 
 ### Live DynamoDB audit-tool verification
 
@@ -217,10 +268,10 @@ outside the application's conditional `PutItem` path.
 **Explicitly separate from:**
 
 - **Offline Moto demo** above (process-local storage; see persistence note).
-- **Step 7 live Bedrock matcher verification** (prior work; five labelled fixtures).
-- **Future work:** approval queue, notification, supervisor orchestration, poll
-  watermark commits, Action-Drafter, dashboard, and AgentCore deployment with
-  production runtime identity wiring.
+- **Live Bedrock matcher verification** (prior work; five labelled fixtures).
+- **Future work:** supervisor orchestration, poll watermark commits, dashboard,
+  and AgentCore deployment with production runtime identity wiring. The
+  notification and owner-choice path remains offline-verified only.
 
 Operator setup, IAM templates, and table design: [`infra/audit/README.md`](infra/audit/README.md).
 Optional `--live` demo mode (`scripts.demo_gate_audit --live`) combines real Bedrock

@@ -13,6 +13,7 @@ from src.config import Settings
 from src.domain.models import Alert, BusinessProfile, MatcherProposal, MatchResult
 from src.domain.tiers import deterministic_floor
 from src.tools.audit import ensure_audit_table
+from src.tools.escalation_queue import ensure_escalation_table
 
 NOW = datetime(2026, 9, 10, 12, tzinfo=UTC)
 
@@ -30,8 +31,10 @@ def audit_settings(monkeypatch: pytest.MonkeyPatch) -> Iterator[Settings]:
             aws_region="eu-west-2",
             bedrock_model_id="offline-test-model",
             dynamodb_table_audit="allerguard-audit-test",
+            dynamodb_table_escalations="allerguard-escalations-test",
         )
         ensure_audit_table(settings)
+        ensure_escalation_table(settings)
         yield settings
 
 

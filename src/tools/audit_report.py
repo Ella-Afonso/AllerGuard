@@ -7,7 +7,7 @@ from html import escape
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from src.domain.models import AuditEntry, AuditEvent, GateDecision
+from src.domain.models import AuditEntry, AuditEvent, GateDecision, NotificationMode
 
 # Official FSA hostnames only — hostname equality after urlsplit, not substring checks.
 FSA_LINK_HOSTS = frozenset({"alerts.food.gov.uk", "data.food.gov.uk"})
@@ -52,6 +52,18 @@ def _source(url: str) -> str:
 def _event_label(entry: AuditEntry) -> str:
     if entry.event is AuditEvent.MATCH_ERROR:
         return "Assessment failed · requires review"
+    if entry.event is AuditEvent.ESCALATION_QUEUED:
+        return "Action pack queued for owner review"
+    if entry.event is AuditEvent.NOTIFICATION_SENT:
+        if entry.notification is not None and entry.notification.mode is NotificationMode.SIMULATED:
+            return "Simulated notification accepted · no message sent"
+        return "Owner notification accepted · inbox receipt unverified"
+    if entry.event is AuditEvent.NOTIFICATION_FAILED:
+        return "Owner notification attempt failed"
+    if entry.event is AuditEvent.NOTIFICATION_UNKNOWN:
+        return "Owner notification outcome unknown"
+    if entry.event is AuditEvent.DECISION_RECORDED and entry.owner_decision is not None:
+        return f"Owner choice recorded · {entry.owner_decision.decision.value}"
     if entry.decision is GateDecision.SILENT:
         return "Recorded quietly"
     return "Requires review"
@@ -79,6 +91,41 @@ def write_audit_report(entries: list[AuditEntry], output: Path, *, storage_label
         tier = entry.tier.value if entry.tier is not None else "Unassessed"
         floor = entry.floor_tier.value if entry.floor_tier is not None else "Unassessed"
         candidates = ", ".join(entry.candidate_ids) or "None"
+        draft_fact = ""
+        if entry.event is AuditEvent.ESCALATION_QUEUED and entry.draft_source is not None:
+            draft_fact = f"<span>Draft source <b>{escape(entry.draft_source.value)}</b></span>"
+        notification_fact = ""
+        if entry.notification is not None:
+            receipt = entry.notification
+            provider = escape(receipt.provider.value)
+            outcome = escape(receipt.outcome.value)
+            mode = escape(receipt.mode.value)
+            notification_fact = (
+                f"<span>Notification <b>{outcome}</b> via <b>{provider}</b> "
+                f"({mode}; provider acceptance is not inbox receipt)</span>"
+            )
+        decision_fact = ""
+        decision_detail = ""
+        if entry.owner_decision is not None:
+            record = entry.owner_decision
+            decision_fact = f"<span>Owner choice <b>{escape(record.decision.value)}</b></span>"
+            original = record.original_action_pack
+            decision_detail = (
+                f"<dt>Owner choice</dt><dd>{escape(record.decision.value)} at "
+                f"{escape(record.decided_at.isoformat())}</dd>"
+                f"<dt>Original pull</dt><dd>{escape(original.pull)}</dd>"
+                f"<dt>Original staff note</dt><dd>{escape(original.staff_note)}</dd>"
+                f"<dt>Original customer notice</dt><dd>{escape(original.customer_notice)}</dd>"
+                f"<dt>Original substitution</dt><dd>{escape(original.substitution)}</dd>"
+            )
+            if record.edited_pack is not None:
+                edited = record.edited_pack
+                decision_detail += (
+                    f"<dt>Edited pull</dt><dd>{escape(edited.pull)}</dd>"
+                    f"<dt>Edited staff note</dt><dd>{escape(edited.staff_note)}</dd>"
+                    f"<dt>Edited customer notice</dt><dd>{escape(edited.customer_notice)}</dd>"
+                    f"<dt>Edited substitution</dt><dd>{escape(edited.substitution)}</dd>"
+                )
         cards.append(f"""
         <article class="event {state}">
           <div class="event-top"><span class="number">{index:02d}</span>
@@ -90,7 +137,9 @@ def write_audit_report(entries: list[AuditEntry], output: Path, *, storage_label
             <span>Floor <b>{escape(floor)}</b></span>
             <span>Final <b>{escape(tier)}</b></span>
             <span>Gate <b>{escape(_gate_label(entry))}</b></span>
-            <span>Mode <b>{escape(entry.mode.value)}</b></span></div>
+            <span>Mode <b>{escape(entry.mode.value)}</b></span>
+            {draft_fact}</div>
+            <div class="facts">{notification_fact}{decision_fact}</div>
           <div class="source">{_source(entry.source_url)}</div>
           <details><summary>Inspect recorded evidence</summary>
             <dl><dt>Business</dt><dd>{escape(entry.business_id)}</dd>
@@ -103,9 +152,33 @@ def write_audit_report(entries: list[AuditEntry], output: Path, *, storage_label
             {escape(entry.model_id)}</dd>
             <dt>Event ID</dt><dd>{escape(entry.entry_id)}</dd>
             <dt>Error type</dt><dd>{escape(entry.error_type or "None")}</dd></dl>
+            <dl>{decision_detail}</dl>
           </details>
         </article>""")
-    document = """<!doctype html>
+    has_owner_events = any(
+        entry.event
+        in {
+            AuditEvent.NOTIFICATION_SENT,
+            AuditEvent.NOTIFICATION_FAILED,
+            AuditEvent.NOTIFICATION_UNKNOWN,
+            AuditEvent.DECISION_RECORDED,
+        }
+        for entry in entries
+    )
+    scope_notice = (
+        "Owner notification evidence and owner choices are shown below.<br>"
+        "No customer or stock action was executed."
+        if has_owner_events
+        else "No owner notification or choice is recorded in this snapshot."
+    )
+    footer_notice = (
+        "Notification evidence is provider acceptance/failure/uncertainty, not inbox receipt. "
+        "No customer, stock or action-pack execution was performed."
+        if has_owner_events
+        else "No notification, approval, or stock action was performed."
+    )
+    document = (
+        """<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
 <title>AllerGuard · Decision evidence</title>
 <style>
@@ -144,8 +217,12 @@ time{margin-left:0}dl{grid-template-columns:1fr}}
 <p class="intro">A read-only view of stored audit events: completed match decisions,
 decisions that require review, and assessments that could not be completed.</p></div>
 <div class="scope">Historical FSA alerts.<br>Fictional business inventory.<br>
-Matching → code gate → audit.<br>No owner notification or approval is connected yet.</div></header>
+Matching → code gate → drafted/fallback action pack → pending queue → audit.<br>
 """
+        + scope_notice
+        + """</div></header>
+"""
+    )
     document += f'<div class="storage">{escape(storage_label)}</div><section class="stats">'
     for count, label in [
         (summary.audit_events, "Stored audit events"),
@@ -157,14 +234,16 @@ Matching → code gate → audit.<br>No owner notification or approval is connec
         document += f'<div class="stat"><b>{count}</b><span>{escape(label)}</span></div>'
     document += '</section><p class="caption">Audit events are append-only store rows, '
     document += "not alerts processed and not notifications sent. One assessment may "
-    document += "produce multiple events when an error is followed by recovery. "
+    document += "produce separate match, queue, notification and owner-choice events, "
+    document += "or error and recovery events. Repeated titles show this linked history. "
     document += '"Requires review" means the gate recorded ESCALATE; it does not mean '
-    document += "the owner was notified.</p>"
+    document += "the owner was notified or that a decision is still pending. "
+    document += "These are historical event counts, not current inbox totals.</p>"
     document += '<section class="events">' + "".join(cards) + "</section>"
-    document += """<footer>Generated from AuditEntry records supplied by the caller after
+    document += f"""<footer>Generated from AuditEntry records supplied by the caller after
     reading the audit store. This report is evidence presentation only — not a second
-    safety gate, not tamper-proof storage, and not proof of delivery. No notification,
-    approval, or stock action was performed.</footer></main></body></html>"""
+    safety gate, not tamper-proof storage, and not proof of delivery. {footer_notice}</footer>
+    </main></body></html>"""
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(document, encoding="utf-8")
     return output.resolve()
