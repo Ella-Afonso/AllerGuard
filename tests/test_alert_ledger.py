@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-from datetime import UTC
+from datetime import UTC, datetime
 from pathlib import Path
+from unittest.mock import Mock, patch
 
 import boto3
 import pytest
@@ -17,6 +18,7 @@ from src.tools.alert_ledger import (
     ensure_alerts_seen_table,
     get_new_alerts,
     list_seen_versions,
+    load_new_alerts,
     read_alert_watermark,
 )
 from src.tools.fsa_api import load_alerts
@@ -63,6 +65,54 @@ def _latest_watermark(alerts: list[Alert]) -> str:
     latest_modified = max(alert.modified for alert in alerts)
 
     return latest_modified.astimezone(UTC).isoformat().replace("+00:00", "Z")
+
+
+def test_explicit_settings_do_not_read_environment(ledger_settings: Settings) -> None:
+    expected = load_alerts(ledger_settings)
+    with patch.object(Settings, "from_environment", side_effect=AssertionError("environment")):
+        assert load_new_alerts(ledger_settings) == expected
+
+
+def test_watermark_compares_fractional_seconds_as_times(ledger_settings: Settings) -> None:
+    alert = load_alerts(ledger_settings)[0].model_copy(
+        update={"modified": datetime(2026, 9, 12, tzinfo=UTC)}
+    )
+    commit_processed_batch("2026-09-12T00:00:00.100000Z", [alert], ledger_settings)
+    assert read_alert_watermark(ledger_settings) == "2026-09-12T00:00:00.100000Z"
+    later = alert.model_copy(
+        update={"modified": datetime(2026, 9, 12, microsecond=200000, tzinfo=UTC)}
+    )
+    with pytest.raises(ValueError):
+        commit_processed_batch("2026-09-12T00:00:00Z", [later], ledger_settings)
+
+
+def test_serial_commit_does_not_move_watermark_backward(ledger_settings: Settings) -> None:
+    alerts = load_alerts(ledger_settings)
+    commit_processed_batch("2026-12-01T00:00:00Z", alerts, ledger_settings)
+    commit_processed_batch(_latest_watermark(alerts), alerts, ledger_settings)
+    assert read_alert_watermark(ledger_settings) == "2026-12-01T00:00:00Z"
+
+
+def test_partial_commit_is_not_an_atomic_rollback(ledger_settings: Settings) -> None:
+    from src.tools import alert_ledger
+
+    alerts = load_alerts(ledger_settings)
+    table = alert_ledger._table(ledger_settings)
+    proxy = Mock(wraps=table)
+
+    def put(*, Item: dict[str, str]) -> object:
+        if Item["alert_id"] == "_watermark":
+            raise RuntimeError("synthetic watermark outage")
+        return table.put_item(Item=Item)
+
+    proxy.put_item.side_effect = put
+    with patch.object(alert_ledger, "_table", return_value=proxy), pytest.raises(RuntimeError):
+        commit_processed_batch(_latest_watermark(alerts), alerts, ledger_settings)
+    assert read_alert_watermark(ledger_settings) is None
+    assert len(list_seen_versions(ledger_settings)) == len(alerts)
+    # All processed versions were saved. Retry retrieval is empty; no false claim
+    # that the entire batch reappears after a partially completed ledger write.
+    assert load_new_alerts(ledger_settings) == []
 
 
 def test_ledger_table_creation_is_idempotent(ledger_settings: Settings) -> None:

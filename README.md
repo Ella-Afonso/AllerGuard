@@ -14,7 +14,7 @@ AllerGuard is an autonomous agent system being developed for small UK food busin
 | **Not verified on live AWS** | Live `process_alert` → DynamoDB integration, live Bedrock end-to-end execution for the audit integration, and AgentCore deployment are **not** verified here. |
 | **Action-Drafter and pending queue** | Implemented: validated four-field drafts, explicit model/fallback provenance, conditional first-write-wins queue and queued audit. Offline integration verified; one live Doritos drafter fixture passed separately. Live queue/process_alert integration on DynamoDB has not been verified. |
 | **Owner notification and approval path** | Implemented and offline verified: disabled-by-default notification boundary, SES/SNS provider truth, simulated notification orchestration, immutable approve/edit/decline decisions, read-only CLI, and report labels. No live email or inbox receipt is claimed. |
-| **Supervisor, watermark, dashboard** | **Not implemented.** Production unattended orchestration, watermark commits, and the dashboard remain future work. |
+| **Supervisor and monitoring cycle (offline)** | Verified with Moto: deterministic five-alert batch, two silent decisions, three escalations, persisted watermark commit, replay returning zero, crash/partial-write recovery, and guarded Strands agents-as-tools wiring. Live scheduler and production attachment remain unverified. |
 
 The offline evidence demo runs the real matcher validation path, deterministic
 gate, and audit append code. Its HTML report is a read-only snapshot of stored
@@ -246,6 +246,20 @@ pending. The final replay adds no sends or decisions. This proves the offline
 orchestration and persistence contract only; it is not live SES, SNS, or inbox
 verification.
 
+The complete offline cycle demonstration reads the five replay fixtures through the
+alert ledger, commits only after every outcome is persisted, and runs a second poll:
+
+```powershell
+.\.venv\Scripts\python.exe -m scripts.demo_cycle --owner-choices none --report artifacts/cycle.html --trace artifacts/cycle-trace.json
+.\.venv\Scripts\python.exe -m scripts.demo_cycle --owner-choices simulated --report artifacts/cycle-owner.html --trace artifacts/cycle-owner-trace.json
+```
+
+The first command records 11 audit events and leaves three pending escalations; the
+second also records approve, edit and decline, ending at 14 events and zero pending.
+Both runs are offline Moto demonstrations with injected specialist proposals and
+simulated provider acceptance. The JSON trace records cycle status, counts and process
+identity. A blocked or uncertain cycle never advances the ledger watermark.
+
 ### Live DynamoDB audit-tool verification
 
 This is **live audit persistence verification using synthetic records** through
@@ -269,8 +283,8 @@ outside the application's conditional `PutItem` path.
 
 - **Offline Moto demo** above (process-local storage; see persistence note).
 - **Live Bedrock matcher verification** (prior work; five labelled fixtures).
-- **Future work:** supervisor orchestration, poll watermark commits, dashboard,
-  and AgentCore deployment with production runtime identity wiring. The
+- **Future work:** dashboard, live scheduler, and AgentCore deployment with production
+  runtime identity wiring. The
   notification and owner-choice path remains offline-verified only.
 
 Operator setup, IAM templates, and table design: [`infra/audit/README.md`](infra/audit/README.md).

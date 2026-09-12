@@ -118,7 +118,7 @@ def list_seen_versions(
     table = _table(resolved_settings)
 
     seen_versions: list[SeenAlertVersion] = []
-    response = table.scan()
+    response = table.scan(ConsistentRead=True)
 
     while True:
         for raw_item in response.get("Items", []):
@@ -156,6 +156,7 @@ def list_seen_versions(
 
         response = table.scan(
             ExclusiveStartKey=last_evaluated_key,
+            ConsistentRead=True,
         )
 
     return seen_versions
@@ -169,7 +170,8 @@ def read_alert_watermark(settings: Settings | None = None) -> str | None:
         Key={
             ALERT_ID_PARTITION_KEY: WATERMARK_ALERT_ID,
             MODIFIED_SORT_KEY: WATERMARK_SORT_KEY,
-        }
+        },
+        ConsistentRead=True,
     )
 
     raw_item = response.get("Item")
@@ -196,7 +198,11 @@ def get_new_alerts() -> list[Alert]:
     Do not judge relevance, match inventory, draft a response, or write to the
     ledger. Passing every unseen alert downstream is the safety requirement.
     """
-    settings = Settings.from_environment()
+    return load_new_alerts(Settings.from_environment())
+
+
+def load_new_alerts(settings: Settings) -> list[Alert]:
+    """Use one explicit configuration for the source and its version ledger."""
     watermark = read_alert_watermark(settings)
     alerts = load_alerts(settings, since=watermark)
 
@@ -222,8 +228,8 @@ def commit_processed_batch(
 
     This is deliberately not a Strands tool. It must be called only after every
     alert in the batch has completed downstream matching, gate, and audit work.
-    Feature 10 has no production caller yet; Feature 20 will call it after the
-    complete pipeline succeeds.
+    The deterministic runtime cycle is its production caller. Writes are serial,
+    not transactional: failure may leave seen rows without an advanced watermark.
     """
     if not alerts:
         return
@@ -231,10 +237,16 @@ def commit_processed_batch(
     resolved_settings = settings or Settings.from_environment()
     normalised_watermark = _normalise_timestamp(watermark)
 
-    latest_alert_modified = max(_timestamp_for_storage(alert.modified) for alert in alerts)
+    latest_alert_modified = max(alert.modified for alert in alerts)
 
-    if normalised_watermark < latest_alert_modified:
+    if datetime.fromisoformat(normalised_watermark) < latest_alert_modified:
         raise ValueError("watermark cannot be earlier than the newest processed alert version.")
+
+    previous = read_alert_watermark(resolved_settings)
+    if previous is not None and datetime.fromisoformat(previous) > datetime.fromisoformat(
+        normalised_watermark
+    ):
+        normalised_watermark = previous
 
     table = _table(resolved_settings)
 
