@@ -78,17 +78,7 @@ def _failure_type(error: BaseException) -> tuple[str, bool]:
     """Return a safe classification and whether the provider definitely rejected."""
     if isinstance(error, ClientError):
         code = str(error.response.get("Error", {}).get("Code", "ClientError"))
-        unknown_codes = {
-            "InternalError",
-            "RequestTimeout",
-            "ServiceUnavailable",
-            "Throttled",
-            "Throttling",
-        }
-        return (
-            code[:80] or "ClientError",
-            code in _DEFINITE_SES_REJECTIONS or code not in unknown_codes,
-        )
+        return (code[:80] or "ClientError", code in _DEFINITE_SES_REJECTIONS)
     if isinstance(error, (TimeoutError, BotoCoreError)):
         return (type(error).__name__[:80], False)
     return (type(error).__name__[:80] or "ProviderError", False)

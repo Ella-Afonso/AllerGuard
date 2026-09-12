@@ -101,6 +101,27 @@ def test_definite_ses_rejection_uses_configured_sns_fallback() -> None:
     assert len(ses.calls) == len(sns.calls) == 1
 
 
+def test_unfamiliar_ses_error_code_is_not_a_definite_rejection() -> None:
+    ses = FakeClient(
+        error=ClientError(
+            {"Error": {"Code": "TotallyUnknownSesCode", "Message": "synthetic"}},
+            "SendEmail",
+        )
+    )
+    sns = FakeClient()
+    receipt = notify.notify_owner(
+        row(),
+        _settings(sns_topic_arn="arn:aws:sns:eu-west-2:123456789012:owner-review"),
+        NOW,
+        ses_client=ses,
+        sns_client=sns,
+    )
+    assert receipt.outcome is NotificationOutcome.UNKNOWN
+    assert receipt.provider is NotificationProvider.SES
+    assert receipt.failure_type == "TotallyUnknownSesCode"
+    assert not sns.calls
+
+
 def test_unknown_ses_failure_does_not_fallback() -> None:
     ses = FakeClient(error=TimeoutError("synthetic timeout"))
     sns = FakeClient()

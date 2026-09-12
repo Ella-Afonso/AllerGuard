@@ -88,6 +88,9 @@ def run_demo(report: Path) -> int:
         ),
         mock_aws(),
     ):
+        os.environ.pop("AWS_PROFILE", None)
+        os.environ.pop("AWS_DEFAULT_PROFILE", None)
+        os.environ.pop("ALLERGUARD_SNS_TOPIC_ARN", None)
         settings = Settings.from_environment().model_copy(
             update={
                 "fsa_mode": "replay",

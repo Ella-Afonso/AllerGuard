@@ -17,7 +17,7 @@ from src.domain.models import (
     NotificationReceipt,
 )
 from src.tools import audit
-from src.tools.escalation_queue import get_decision, get_queued_evidence
+from src.tools.escalation_queue import get_decision, get_escalation, get_queued_evidence
 from src.tools.notify import notify_owner
 
 DeliveryFunction = Callable[[Escalation, Settings, datetime], NotificationReceipt]
@@ -89,9 +89,22 @@ def notify_escalation(
     """
     if attempted_at.tzinfo is None or attempted_at.utcoffset() is None:
         raise ValueError("attempted_at must include a timezone.")
-    if queued_audit is None:
-        queued_audit = get_queued_evidence(escalation, settings)
-    _check_queued_evidence(escalation, queued_audit)
+    stored = get_escalation(escalation.business_id, escalation.escalation_id, settings)
+    if stored is None:
+        raise NotificationPersistenceError("Notification requires a stored queue row.")
+    if (
+        stored.assessment_id != escalation.assessment_id
+        or stored.alert_id != escalation.alert_id
+        or stored.business_id != escalation.business_id
+    ):
+        raise NotificationPersistenceError("Caller escalation does not match the stored queue.")
+    stored_evidence = get_queued_evidence(stored, settings)
+    if queued_audit is not None:
+        _check_queued_evidence(stored, queued_audit)
+        if queued_audit.entry_id != stored_evidence.entry_id:
+            raise NotificationPersistenceError("Caller queued-audit is not the stored evidence.")
+    queued_audit = stored_evidence
+    escalation = stored
 
     stored_decision = get_decision(escalation.business_id, escalation.escalation_id, settings)
     if stored_decision is not None:
