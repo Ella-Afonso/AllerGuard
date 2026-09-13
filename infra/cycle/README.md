@@ -1,18 +1,23 @@
 # Scheduled infrastructure proof
 
-Template validated by AWS; deployment attempted and rolled back on 2026-09-13.
-The applied Lambda concurrency quota in eu-west-2 is 10. AWS requires 10
-unreserved executions, so reserving one fails. A quota request for 20 was also
-rejected because that API requires a value above its default 1,000. No increase
-was submitted successfully. Keep the serial constraint; do not remove it to
-make deployment pass. No full-cycle AWS invocation ran.
+Stack `allerguard-cycle-proof-v2` deployed successfully on 2026-09-13 21:41 UTC
+in eu-west-2. Initial deployment failed due to missing `dynamodb:Scan` permission
+in the IAM role policy. The template was corrected to include Scan alongside
+GetItem and Query. Stack was updated at 21:59 UTC. The Lambda concurrency quota
+was successfully increased to 1000, allowing `ReservedConcurrentExecutions: 1`.
 
-Four tables with prefix `allerguard-cycle-proof-20260913` remain (business,
-ledger, audit, queue); only the fictional business was seeded. The package was
-uploaded under `allerguard-cycle-proof/20260913/cycle.zip` in the existing
-AgentCore deployment bucket. Stack `allerguard-cycle-proof` is ROLLBACK_COMPLETE.
-Its Lambda/role/logs were rolled back; no schedule is active. The pre-existing
-hello runtime/invoker was untouched. Retained tables can incur storage charges.
+First scheduled EventBridge invocation at 22:00:27 UTC processed five replay
+alerts: two silent (FSA-PRIN-43-2026, FSA-PRIN-39-2026) and three escalated
+(FSA-AA-55-2020, FSA-AA-42-2026, FSA-AA-38-2026). Status: COMMITTED. Watermark
+advanced to 2026-09-04T18:39:45.509Z. Second scheduled invocation at 22:10:28 UTC
+reported EMPTY with zero alerts and unchanged watermark. EventBridge rule
+disabled after proof completion. Notifications remained disabled throughout.
+
+Four tables with prefix `allerguard-cycle-proof-20260913` contain the proof
+evidence: business (1 item), ledger (6 items including watermark), audit (8
+events), queue (3 escalations). The package was uploaded under
+`allerguard-cycle-proof/20260913/cycle.zip` in the existing AgentCore deployment
+bucket. The pre-existing hello runtime/invoker was untouched.
 
 This wraps the existing cycle, uses dedicated synthetic-business tables, and
 performs no external notifications or owner decisions.

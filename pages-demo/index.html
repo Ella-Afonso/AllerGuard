@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AllerGuard · Interactive Public Demo</title>
+<link rel="stylesheet" href="styles.css">
+<script src="app.js" defer></script>
+</head>
+<body>
+
+<header class="top">
+  <a class="brand" href="#inbox" data-nav="inbox">
+    AllerGuard
+    <span>Quiet by design.</span>
+  </a>
+  <nav aria-label="Main navigation">
+    <a href="#inbox" data-nav="inbox" aria-current="page">Inbox</a>
+    <a href="#audit" data-nav="audit">Audit trail</a>
+    <a href="#diary" data-nav="diary">Diary</a>
+    <a href="#business" data-nav="business">Business</a>
+  </nav>
+</header>
+
+<main>
+  
+  <!-- PUBLIC DEMO DISCLOSURE -->
+  <div class="disclosure">
+    <strong>PUBLIC INTERACTIVE DEMO</strong>
+    <p>Synthetic/public recall data · browser-only simulation · simulated notifications · no stock or customer action</p>
+  </div>
+
+  <!-- PROJECT DESCRIPTION -->
+  <section id="intro" class="intro-section">
+    <h1>AllerGuard monitors food-recall alerts, stays quiet for irrelevant alerts, escalates uncertain or relevant matches for owner review, and records evidence for every outcome.</h1>
+    
+    <div class="toolbar">
+      <button id="start-fresh" class="primary-btn">Start fresh demo</button>
+      <button id="run-replay" class="primary-btn" disabled>Run replay demo</button>
+      <span class="muted">Historical FSA recalls · fictional café</span>
+    </div>
+
+    <div id="feedback" role="status" aria-live="polite"></div>
+
+    <div id="summary" class="stats" hidden>
+      <div><strong id="stat-pending">0</strong><span>Pending decisions</span></div>
+      <div><strong id="stat-assessed">0</strong><span>Distinct assessments</span></div>
+      <div><strong id="stat-silent">0</strong><span>Handled silently</span></div>
+      <div><strong id="stat-events">0</strong><span>Stored events</span></div>
+    </div>
+
+    <p id="cycle-status" class="cycle" hidden></p>
+  </section>
+
+  <!-- INBOX VIEW -->
+  <div id="view-inbox" class="view active">
+    <div class="heading">
+      <p class="eyebrow">YOUR ATTENTION, WHERE IT MATTERS</p>
+      <h1>Decisions for you.</h1>
+      <p>Review the evidence and choose what happens to the draft.</p>
+    </div>
+
+    <section id="inbox-content" class="empty">
+      <h2>Nothing needs your review right now.</h2>
+      <p>Run the replay demo to assess five historical alerts.</p>
+      <p>Start a demo above to create your own isolated café session.</p>
+    </section>
+  </div>
+
+  <!-- AUDIT VIEW -->
+  <div id="view-audit" class="view">
+    <div class="heading">
+      <p class="eyebrow">EVERY DECISION HAS A RECORD</p>
+      <h1>The work you didn't have to do.</h1>
+      <p>Silent assessments, drafts, notifications and owner choices in one history.</p>
+    </div>
+
+    <div class="toolbar">
+      <button id="export-csv" class="button" disabled>Download CSV</button>
+      <button id="export-html" class="button secondary" disabled>Download HTML evidence</button>
+    </div>
+
+    <p class="muted">Events are historical records, not current pending totals. Repeated titles show separate linked events. This audit is browser-local simulation evidence.</p>
+
+    <section id="audit-content"></section>
+  </div>
+
+  <!-- DIARY VIEW -->
+  <div id="view-diary" class="view">
+    <div class="heading">
+      <p class="eyebrow">ONE DAILY RECORD</p>
+      <h1>Today, accounted for.</h1>
+      <p id="diary-date"></p>
+    </div>
+
+    <section id="diary-content">
+      <div class="empty">
+        <h2>No diary filed for today.</h2>
+        <button id="file-diary" disabled>Prepare today's diary</button>
+        <p>Preparing the record does not confirm opening or closing tasks. First-write-wins: later amendment is not implemented in this public simulation.</p>
+      </div>
+    </section>
+  </div>
+
+  <!-- BUSINESS VIEW -->
+  <div id="view-business" class="view">
+    <div class="heading">
+      <p class="eyebrow">THE CONTEXT BEHIND EACH DECISION</p>
+      <h1>Your café, understood.</h1>
+      <p>Read-only fictional inventory. Menu upload is not available in this version.</p>
+    </div>
+
+    <section id="business-content">
+      <p>Start a demo to load the fictional café.</p>
+    </section>
+  </div>
+
+  <!-- AWS EVIDENCE SECTION -->
+  <section id="aws-evidence" class="evidence-section" hidden>
+    <h2>Verified AWS Proof</h2>
+    <div class="card">
+      <h3>EventBridge-triggered Lambda Execution</h3>
+      <ul>
+        <li>Stack: <code>allerguard-cycle-proof-v2</code> in <code>eu-west-2</code></li>
+        <li>First proof (2026-09-13 22:00:27 UTC): 5 alerts processed, 2 silent, 3 escalated</li>
+        <li>8 audit records and 3 queued reviews persisted to DynamoDB</li>
+        <li>Later scheduled poll (2026-09-13 22:10:28 UTC): empty with unchanged watermark</li>
+        <li>Notifications disabled throughout</li>
+      </ul>
+    </div>
+    <div class="card limitation">
+      <h3>Explicit Limitation</h3>
+      <p>This public Pages site does not invoke AWS, Bedrock, SES, SNS, DynamoDB, customer communications, or stock actions. The above AWS proof is documented evidence; it is not executed by this browser.</p>
+    </div>
+  </section>
+
+  <footer>
+    <p>Decisions record a choice. They do not execute stock actions or send customer notices. Specialist proposals and notifications are simulated. No AWS or Bedrock calls from this browser.</p>
+    <p class="muted">AllerGuard · 2026 · Public demonstration only</p>
+  </footer>
+
+</main>
+
+</body>
+</html>
