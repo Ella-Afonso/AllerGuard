@@ -9,7 +9,7 @@ AllerGuard is an autonomous agent system being developed for small UK food busin
 | **Matcher (live Bedrock)** | Verified. Five labelled live fixture tests passed against real Bedrock in `eu-west-2`. This is separate from audit storage. |
 | **Gate + audit (offline)** | Verified. Deterministic gate, append-only audit boundary, and `process_alert` seam exercised with Moto and injected proposals (`tests/test_gate.py`, `tests/test_audit.py`, `tests/test_process_alert.py`, `tests/test_audit_demo.py`). |
 | **Offline test suite baseline** | Verified (2026-09-10): **197 passed**, **5 live Bedrock cases intentionally skipped** (`ALLERGUARD_LIVE_BEDROCK` unset), **1 third-party Pydantic warning** (bedrock-agentcore). |
-| **Current offline suite** | Verified (2026-09-12): **330 passed**, **6 paid Bedrock cases deselected**, **1 third-party Pydantic warning**. Ruff check/format, mypy and diff checks passed. |
+| **Current offline suite** | Verified (2026-09-12): **361 passed**, **6 paid Bedrock cases deselected**, **1 third-party Pydantic warning**. Ruff check passed; format check reported 88 files already formatted; mypy passed across 48 source files. |
 | **Live DynamoDB audit-tool verification** | Verified (2026-09-10). Real table `allerguard-audit` in `eu-west-2`; audit-tool append/read, duplicate protection, separate-process persistence, and preservation of synthetic error/recovery events under a scoped assumed runtime role used **only for live verification** — not attached to production compute. Synthetic records only; operator guide in [`infra/audit/README.md`](infra/audit/README.md). |
 | **Not verified on live AWS** | Live `process_alert` → DynamoDB integration, live Bedrock end-to-end execution for the audit integration, and AgentCore deployment are **not** verified here. |
 | **Action-Drafter and pending queue** | Implemented: validated four-field drafts, explicit model/fallback provenance, conditional first-write-wins queue and queued audit. Offline integration verified; one live Doritos drafter fixture passed separately. Live queue/process_alert integration on DynamoDB has not been verified. |
@@ -112,9 +112,10 @@ python -m mypy src
 python -m pytest
 ```
 
-The current verified offline suite result (2026-09-12): **330 passed**, **6 paid
-Bedrock cases deselected**, and **1 third-party Pydantic warning**. Ruff check,
-format check, mypy and diff checks also pass. Live Bedrock cases remain opt-in
+The current verified offline suite result (2026-09-12): **361 passed**, **6 paid
+Bedrock cases deselected**, and **1 third-party Pydantic warning**. Ruff check
+passed; format check reported 88 files already formatted; mypy passed across
+48 source files. Live Bedrock cases remain opt-in
 via `ALLERGUARD_LIVE_BEDROCK=1`; Live matcher verification is separate
 from the default offline run.
 
@@ -145,7 +146,9 @@ If audit persistence fails, processing raises `AuditPersistenceError` and cannot
 return a successful receipt. The runtime also persists a validated drafted/fallback
 action pack and pending escalation. The runtime also adds an explicit owner-notification
 boundary and immutable owner decision records; it does not execute customer or
-stock actions. Supervisor orchestration and watermark commits remain future work.
+stock actions. An offline deterministic monitoring cycle and guarded supervisor
+path now commit the ledger watermark after persisted outcomes; live AWS
+scheduling and production attachment remain unverified.
 
 ### Offline demonstration
 
@@ -259,6 +262,10 @@ second also records approve, edit and decline, ending at 14 events and zero pend
 Both runs are offline Moto demonstrations with injected specialist proposals and
 simulated provider acceptance. The JSON trace records cycle status, counts and process
 identity. A blocked or uncertain cycle never advances the ledger watermark.
+A one-time local Windows scheduled invocation (`AllerGuard offline cycle proof`)
+ran automatically on 2026-09-12 at 21:14:36 Europe/London and returned result 0.
+That proves unattended local offline execution only; it is not production AWS
+scheduling.
 
 ### Live DynamoDB audit-tool verification
 
