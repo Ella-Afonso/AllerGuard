@@ -9,7 +9,7 @@ AllerGuard is an autonomous agent system being developed for small UK food busin
 | **Matcher (live Bedrock)** | Verified. Five labelled live fixture tests passed against real Bedrock in `eu-west-2`. This is separate from audit storage. |
 | **Gate + audit (offline)** | Verified. Deterministic gate, append-only audit boundary, and `process_alert` seam exercised with Moto and injected proposals (`tests/test_gate.py`, `tests/test_audit.py`, `tests/test_process_alert.py`, `tests/test_audit_demo.py`). |
 | **Offline test suite baseline** | Verified (2026-09-10): **197 passed**, **5 live Bedrock cases intentionally skipped** (`ALLERGUARD_LIVE_BEDROCK` unset), **1 third-party Pydantic warning** (bedrock-agentcore). |
-| **Current offline suite** | Verified (2026-09-12): **361 passed**, **6 paid Bedrock cases deselected**, **1 third-party Pydantic warning**. Ruff check passed; format check reported 88 files already formatted; mypy passed across 48 source files. |
+| **Current offline suite** | Verified (2026-09-13): **407 passed**, **6 paid Bedrock cases deselected**, **1 third-party Pydantic warning**. Ruff check passed; format check reported 98 files already formatted; mypy passed across 52 source files. |
 | **Live DynamoDB audit-tool verification** | Verified (2026-09-10). Real table `allerguard-audit` in `eu-west-2`; audit-tool append/read, duplicate protection, separate-process persistence, and preservation of synthetic error/recovery events under a scoped assumed runtime role used **only for live verification** — not attached to production compute. Synthetic records only; operator guide in [`infra/audit/README.md`](infra/audit/README.md). |
 | **Not verified on live AWS** | Live `process_alert` → DynamoDB integration, live Bedrock end-to-end execution for the audit integration, and AgentCore deployment are **not** verified here. |
 | **Action-Drafter and pending queue** | Implemented: validated four-field drafts, explicit model/fallback provenance, conditional first-write-wins queue and queued audit. Offline integration verified; one live Doritos drafter fixture passed separately. Live queue/process_alert integration on DynamoDB has not been verified. |
@@ -112,10 +112,10 @@ python -m mypy src
 python -m pytest
 ```
 
-The current verified offline suite result (2026-09-12): **361 passed**, **6 paid
+The current verified offline suite result (2026-09-13): **407 passed**, **6 paid
 Bedrock cases deselected**, and **1 third-party Pydantic warning**. Ruff check
-passed; format check reported 88 files already formatted; mypy passed across
-48 source files. Live Bedrock cases remain opt-in
+passed; format check reported 98 files already formatted; mypy passed across
+52 source files. Live Bedrock cases remain opt-in
 via `ALLERGUARD_LIVE_BEDROCK=1`; Live matcher verification is separate
 from the default offline run.
 
@@ -300,6 +300,68 @@ with DynamoDB and is not required for offline or audit-tool verification.
 
 ## Application structure
 
+### Daily diary and unified evidence export
+
+The daily runtime files one immutable record per business and Europe/London date.
+Opening and closing start unconfirmed. The trusted owner CLI appends explicit
+answers separately; it never overwrites the original filing. Repeat requests
+return the stored first record. Recorded approvals, edits, declines, and pending
+reviews are linked from persisted recall evidence. An approval does not prove
+that a stock or customer action was executed.
+
+Run either complete demonstration offline:
+
+```powershell
+python -m scripts.demo_diary --date 2026-09-13 --owner-confirmation none --report artifacts/diary-pending.html --csv artifacts/diary-pending.csv --trace artifacts/diary-pending-trace.json
+python -m scripts.demo_diary --date 2026-09-13 --owner-confirmation simulated --report artifacts/diary.html --csv artifacts/diary.csv --trace artifacts/diary-trace.json
+```
+
+Each command owns a separate process-local Moto store and uses the real cycle,
+approval, diary, and export runtimes with injected assessment/drafting and
+simulated notifications. Doritos is explicitly approved by alert identity. The
+first run ends with 15 stored events (14 recall events plus one diary filing).
+The second ends with 16 (one additional simulated owner confirmation). Each
+verifies unchanged evidence after retry, three simulated notifications, zero
+pending recall escalations, and CSV row counts matching the complete history.
+The program exits nonzero when its proof fails.
+
+The HTML keeps recall and diary counts separate and shows original filed facts,
+subsequent confirmation, and later same-day links with an explicit as-of time.
+The CSV has one row per stored event, with structured JSON preserving nested
+evidence. Both formats use one retrieved collection. Paginated DynamoDB reads
+are not an atomic snapshot; no atomic multi-file export is claimed. Exports do
+not change stored state.
+
+These callable commands require deliberately configured persistent storage:
+
+```powershell
+python -m src.runtime.daily_diary --business-id demo-cafe --date 2026-09-13
+python -m src.runtime.approve --business-id demo-cafe diary show 2026-09-13
+python -m src.runtime.approve --business-id demo-cafe diary confirm 2026-09-13 --opening confirmed --closing confirmed
+```
+
+Use `exception` with `--note` to record an exception. The standalone CLI cannot
+read a previous demo's Moto data after that demo exits. Showing or exporting a
+diary never confirms it. Confirmation is first-write-wins; later amendments are
+not implemented. The daily job is callable but no daily production schedule is
+attached or verified. The record is a snapshot; later same-day links are derived
+from additional stored evidence without rewriting it. Historical pending state
+is not retroactively changed by decisions on later business dates.
+
+Diary facts and default wording are deterministic. An optional summary callback
+can supply model wording with provenance; it has no authority over structured
+facts. That narrative is labelled unverified, ordinary failures use fallback,
+and no live diary Bedrock call has been verified. This is a daily record, not
+temperature logging, cleaning management, or a compliance certification.
+
+Focused verification:
+
+```powershell
+python -m pytest tests/test_diary.py tests/test_diary_audit.py tests/test_diary_cli.py tests/test_export.py tests/test_diary_demo.py -q
+```
+
+### Modules
+
 - `src/agents/` — agent prompts and orchestration
 - `src/tools/` — external effects and service integrations
 - `src/domain/` — pure data models and matching logic
@@ -341,6 +403,7 @@ The planned application stack includes:
 - Amazon Bedrock
 - Boto3 with its CRT extra
 - Pydantic
+- tzdata for portable Europe/London business dates, including Windows
 - pytest, Ruff, and mypy
 
 This disclosure will be updated as implementation progresses and additional tools or pre-existing code are used.

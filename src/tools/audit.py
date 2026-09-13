@@ -8,9 +8,14 @@ from typing import Any
 import boto3
 from boto3.dynamodb.conditions import Key
 from botocore.exceptions import BotoCoreError, ClientError
+from pydantic import TypeAdapter
 
 from src.config import Settings
+from src.domain.diary import DiaryAppendResult, DiaryEvent, DiaryRecord, diary_id
 from src.domain.models import AuditAppendResult, AuditEntry, GateDecision
+
+HistoryRecord = AuditEntry | DiaryRecord
+HISTORY_ADAPTER: TypeAdapter[HistoryRecord] = TypeAdapter(HistoryRecord)
 
 logger = logging.getLogger(__name__)
 AUDIT_KEY_SCHEMA = [
@@ -138,14 +143,14 @@ def append_audit_entry(entry: AuditEntry, settings: Settings | None = None) -> A
     return AuditAppendResult(entry=validated, created=True)
 
 
-def list_audit_entries(
+def list_history(
     business_id: str, settings: Settings | None = None, *, page_size: int = 100
-) -> list[AuditEntry]:
+) -> list[HistoryRecord]:
     """Query every page for one business; return records in timestamp order."""
     if not business_id.strip() or page_size < 1:
         raise ValueError("A business_id and positive page_size are required.")
     resolved = settings or Settings.from_environment()
-    entries: list[AuditEntry] = []
+    entries: list[HistoryRecord] = []
     try:
         table = _table(resolved)
         response = table.query(
@@ -154,7 +159,9 @@ def list_audit_entries(
             Limit=page_size,
         )
         while True:
-            entries.extend(AuditEntry.model_validate(raw) for raw in response.get("Items", []))
+            entries.extend(
+                HISTORY_ADAPTER.validate_python(raw) for raw in response.get("Items", [])
+            )
             last_key = response.get("LastEvaluatedKey")
             if not last_key:
                 break
@@ -167,3 +174,63 @@ def list_audit_entries(
     except (BotoCoreError, ClientError, ValueError, TypeError) as error:
         raise AuditPersistenceError("Audit history could not be read completely.") from error
     return sorted(entries, key=lambda entry: (entry.timestamp, entry.entry_id))
+
+
+def list_audit_entries(
+    business_id: str, settings: Settings | None = None, *, page_size: int = 100
+) -> list[AuditEntry]:
+    """Return recall records after validating the complete mixed history."""
+    return [
+        row
+        for row in list_history(business_id, settings, page_size=page_size)
+        if isinstance(row, AuditEntry)
+    ]
+
+
+def get_diary_record(
+    business_id: str, entry_id: str, settings: Settings | None = None
+) -> DiaryRecord | None:
+    """Consistently read one diary fact; never coerce a recall row into a diary."""
+    resolved = settings or Settings.from_environment()
+    try:
+        raw = (
+            _table(resolved)
+            .get_item(Key={"business_id": business_id, "entry_id": entry_id}, ConsistentRead=True)
+            .get("Item")
+        )
+        return None if raw is None else DiaryRecord.model_validate(raw)
+    except (BotoCoreError, ClientError, ValueError, TypeError) as error:
+        raise AuditPersistenceError("Diary evidence could not be read.") from error
+
+
+def append_diary_record(record: DiaryRecord, settings: Settings | None = None) -> DiaryAppendResult:
+    """Insert an immutable daily fact, returning the stored winner on retry."""
+    resolved = settings or Settings.from_environment()
+    validated = DiaryRecord.model_validate(record.model_dump(mode="python"))
+    if validated.event is DiaryEvent.CONFIRMED:
+        filed = get_diary_record(validated.business_id, diary_id(validated.entry_date), resolved)
+        if filed is None or filed.event is not DiaryEvent.FILED:
+            raise ValueError("File the diary before recording owner confirmation.")
+        if validated.timestamp < filed.timestamp:
+            raise ValueError("Confirmation cannot precede filing.")
+    try:
+        _table(resolved).put_item(
+            Item=validated.model_dump(mode="json"),
+            ConditionExpression="attribute_not_exists(#pk) AND attribute_not_exists(#sk)",
+            ExpressionAttributeNames={"#pk": "business_id", "#sk": "entry_id"},
+        )
+    except ClientError as error:
+        if error.response["Error"]["Code"] != "ConditionalCheckFailedException":
+            raise AuditPersistenceError("Diary append failed; no success acknowledged.") from error
+        existing = get_diary_record(validated.business_id, validated.entry_id, resolved)
+        if existing is None or (existing.event, existing.entry_date) != (
+            validated.event,
+            validated.entry_date,
+        ):
+            raise AuditPersistenceError("Diary key collision could not be reconciled.") from error
+        return DiaryAppendResult(record=existing, created=False)
+    except BotoCoreError as error:
+        raise AuditPersistenceError(
+            "Diary append outcome unknown; retry the same identity."
+        ) from error
+    return DiaryAppendResult(record=validated, created=True)

@@ -7,6 +7,7 @@ from html import escape
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from src.domain.diary import DiaryEvent, DiaryRecord, DiaryView
 from src.domain.models import AuditEntry, AuditEvent, GateDecision, NotificationMode
 
 # Official FSA hostnames only — hostname equality after urlsplit, not substring checks.
@@ -77,7 +78,95 @@ def _gate_label(entry: AuditEntry) -> str:
     return "Requires review"
 
 
-def write_audit_report(entries: list[AuditEntry], output: Path, *, storage_label: str) -> Path:
+def _diary_section(views: list[DiaryView], records: list[DiaryRecord]) -> str:
+    if not records:
+        return ""
+    parts = ['<section class="events" aria-label="Daily diary"><h2>Daily diary</h2>']
+    counts = {event: sum(row.event is event for row in records) for event in DiaryEvent}
+    parts.append(
+        f'<p class="caption">Diary filings: {counts[DiaryEvent.FILED]} · '
+        f"Owner confirmations: {counts[DiaryEvent.CONFIRMED]} · "
+        f"Diary errors: {counts[DiaryEvent.ERROR]}. "
+        "These events are separate from the recall counts above.</p>"
+    )
+    for view in views:
+        diary = view.filed.diary
+        if diary is None:
+            continue
+        parts.append(
+            f'<article class="event" id="{escape(view.filed.entry_id, quote=True)}">'
+            f'<span class="badge">Daily record · {diary.entry_date}</span>'
+            f"<h2>{escape(diary.business_id)}</h2>"
+            "<p>Recall decisions linked automatically from stored evidence.</p>"
+            "<p>Original filing: opening unconfirmed; closing unconfirmed.</p>"
+            f'<p class="caption">Filed {escape(diary.filed_at.isoformat())}; '
+            f"evidence cutoff {escape(diary.evidence_cutoff.isoformat())}; "
+            f"business timezone {escape(diary.business_timezone)}.</p>"
+        )
+        if diary.summary_source.value == "model":
+            parts.append(
+                '<p class="caption">Optional model wording, unverified narrative; '
+                "the structured evidence below is authoritative.</p>"
+            )
+        parts.append(
+            f'<p>{escape(diary.summary)}</p><p class="caption">Summary source: '
+            f"{escape(diary.summary_source.value)} / "
+            f"{escape(diary.summary_model_id)}</p>"
+        )
+        if view.confirmation is not None and view.confirmation.confirmation is not None:
+            answers = view.confirmation.confirmation
+            parts.append(
+                f"<p><b>Owner confirmation ({escape(answers.mode)})</b>: opening "
+                f"{escape(answers.opening_status.value)}; closing "
+                f"{escape(answers.closing_status.value)}.</p>"
+                f"<p>Note: {escape(answers.note or 'None')}</p>"
+                f'<p class="caption">Recorded '
+                f"{escape(view.confirmation.timestamp.isoformat())}</p>"
+            )
+        else:
+            parts.append("<p><b>Awaiting owner confirmation</b>: opening and closing.</p>")
+        parts.append("<details><summary>Original filed recall links and exceptions</summary><ul>")
+        for link in diary.recall_actions:
+            parts.append(f"<li>{escape(link.alert_title)} — {escape(link.state)}</li>")
+        parts.append("</ul><p>" + escape("; ".join(diary.exceptions)) + "</p></details>")
+        additional = {link.event_id for link in view.additional_links}
+        parts.append(f"<h3>Recall evidence as of {escape(view.as_of.isoformat())}</h3><ul>")
+        for link in view.current_recall_actions:
+            origin = " · linked after filing" if link.event_id in additional else " · filed link"
+            choice = (
+                "awaiting owner review"
+                if link.state == "pending"
+                else f"owner choice: {link.state}"
+            )
+            parts.append(
+                f"<li>{escape(link.alert_title)} — {escape(choice)} "
+                f"at {escape(link.evidence_at.isoformat())}{origin}. "
+                f'<a href="#{escape(link.event_id, quote=True)}">View decision evidence</a>'
+                "</li>"
+            )
+        parts.append(
+            '</ul><p class="caption">Choices record approval, editing or decline. '
+            "They do not prove customer or stock actions were executed.</p></article>"
+        )
+    parts.append("<details><summary>All stored diary events</summary>")
+    for row in records:
+        parts.append(
+            f"<h3>{escape(row.event.value)} · {escape(row.entry_id)}</h3>"
+            f'<pre style="white-space:pre-wrap;overflow-wrap:anywhere">'
+            f"{escape(row.model_dump_json(indent=2))}</pre>"
+        )
+    parts.append("</details></section>")
+    return "".join(parts)
+
+
+def write_audit_report(
+    entries: list[AuditEntry],
+    output: Path,
+    *,
+    storage_label: str,
+    diary_views: list[DiaryView] | None = None,
+    diary_records: list[DiaryRecord] | None = None,
+) -> Path:
     """Export a snapshot, with no action buttons and no claims of notification.
 
     Callers must pass rows read back from the audit store via the audit tool.
@@ -127,7 +216,7 @@ def write_audit_report(entries: list[AuditEntry], output: Path, *, storage_label
                     f"<dt>Edited substitution</dt><dd>{escape(edited.substitution)}</dd>"
                 )
         cards.append(f"""
-        <article class="event {state}">
+        <article class="event {state}" id="{escape(entry.entry_id, quote=True)}">
           <div class="event-top"><span class="number">{index:02d}</span>
             <span class="badge">{escape(_event_label(entry))}</span>
             <time>{escape(entry.timestamp.isoformat())}</time></div>
@@ -225,7 +314,7 @@ Matching → code gate → drafted/fallback action pack → pending queue → au
     )
     document += f'<div class="storage">{escape(storage_label)}</div><section class="stats">'
     for count, label in [
-        (summary.audit_events, "Stored audit events"),
+        (summary.audit_events, "Recall audit events" if diary_records else "Stored audit events"),
         (summary.distinct_assessments, "Distinct assessments"),
         (summary.silent_decision_events, "Silent decision events"),
         (summary.escalation_decision_events, "Requires-review decision events"),
@@ -239,8 +328,9 @@ Matching → code gate → drafted/fallback action pack → pending queue → au
     document += '"Requires review" means the gate recorded ESCALATE; it does not mean '
     document += "the owner was notified or that a decision is still pending. "
     document += "These are historical event counts, not current inbox totals.</p>"
+    document += _diary_section(diary_views or [], diary_records or [])
     document += '<section class="events">' + "".join(cards) + "</section>"
-    document += f"""<footer>Generated from AuditEntry records supplied by the caller after
+    document += f"""<footer>Generated from stored evidence supplied by the caller after
     reading the audit store. This report is evidence presentation only — not a second
     safety gate, not tamper-proof storage, and not proof of delivery. {footer_notice}</footer>
     </main></body></html>"""

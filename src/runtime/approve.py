@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import argparse
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Sequence
 
 from src.config import Settings
+from src.domain.diary import DailyStatus, DiaryConfirmation
 from src.domain.models import ActionPack, AuditEvent, OwnerDecision
 from src.tools import audit
 from src.tools.decision_input import DecisionInputError, load_action_pack
+from src.tools.diary import confirm_diary, read_diary_view
 from src.tools.escalation_queue import (
     EscalationPersistenceError,
     get_escalation_view,
@@ -31,6 +33,16 @@ def _parser() -> argparse.ArgumentParser:
     edit = commands.add_parser("edit")
     edit.add_argument("escalation_id")
     edit.add_argument("--pack-file", required=True)
+    diary = commands.add_parser("diary", help="view a daily record or confirm explicit answers")
+    daily_commands = diary.add_subparsers(dest="diary_command", required=True)
+    daily_show = daily_commands.add_parser("show")
+    daily_show.add_argument("entry_date", type=date.fromisoformat)
+    confirm = daily_commands.add_parser("confirm")
+    confirm.add_argument("entry_date", type=date.fromisoformat)
+    confirm.add_argument("--opening", choices=("confirmed", "exception"), required=True)
+    confirm.add_argument("--closing", choices=("confirmed", "exception"), required=True)
+    confirm.add_argument("--note", default="")
+    confirm.add_argument("--simulated", action="store_true", help="label demonstration input")
     return parser
 
 
@@ -102,14 +114,58 @@ def _list(business_id: str, settings: Settings) -> int:
     return 0
 
 
-def main(argv: Sequence[str] | None = None) -> int:
+def main(
+    argv: Sequence[str] | None = None,
+    *,
+    now: datetime | None = None,
+    settings: Settings | None = None,
+) -> int:
     """Run one read-only view or one first-write-wins owner command."""
     try:
         args = _parser().parse_args(argv)
     except SystemExit as error:
         return error.code if isinstance(error.code, int) else 1
-    settings = Settings.from_environment()
+    settings = settings or Settings.from_environment()
+    now = now or datetime.now(UTC)
     try:
+        if args.command == "diary":
+            if args.diary_command == "show":
+                view = read_diary_view(
+                    args.business_id, args.entry_date, as_of=now, settings=settings
+                )
+                print(f"Diary: {view.filed.entry_id}")
+                print("Original filing: opening unconfirmed; closing unconfirmed.")
+                if view.confirmation is not None and view.confirmation.confirmation is not None:
+                    answers = view.confirmation.confirmation
+                    print(
+                        f"Owner confirmation ({answers.mode}): opening "
+                        f"{answers.opening_status.value}; closing {answers.closing_status.value}."
+                    )
+                    print(f"Note: {answers.note or 'None'}")
+                else:
+                    print("Opening and closing await explicit owner confirmation.")
+                for link in view.current_recall_actions:
+                    print(f"Recall: {link.alert_title} | {link.state} | {link.event_id}")
+                print("Owner choices do not prove stock or customer actions were executed.")
+                return 0
+            daily_result = confirm_diary(
+                args.business_id,
+                args.entry_date,
+                DiaryConfirmation(
+                    opening_status=DailyStatus(args.opening),
+                    closing_status=DailyStatus(args.closing),
+                    note=args.note,
+                    mode="simulated" if args.simulated else "owner",
+                ),
+                now=now,
+                settings=settings,
+            )
+            print(
+                f"Diary confirmation {'recorded' if daily_result.created else 'already recorded'}: "
+                f"{daily_result.record.entry_id}"
+            )
+            print("Stored first answers retained. No customer or stock action executed.")
+            return 0
         if args.command == "list":
             return _list(args.business_id, settings)
         if args.command == "show":
@@ -125,7 +181,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.escalation_id,
             decision,
             edited_pack,
-            decided_at=datetime.now(UTC),
+            decided_at=now,
             settings=settings,
         )
         state = "recorded" if result.created else "already recorded; stored first choice retained"
