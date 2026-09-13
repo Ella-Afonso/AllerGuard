@@ -47,6 +47,10 @@ Resources:
                   - !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AuditTable}
                   - !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${EscalationsTable}
               - Effect: Allow
+                Action: dynamodb:Scan
+                Resource:
+                  - !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${LedgerTable}
+              - Effect: Allow
                 Action: dynamodb:PutItem
                 Resource:
                   - !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${LedgerTable}
