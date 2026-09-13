@@ -10,6 +10,9 @@ dependencies = [
     "boto3[crt]",
     "pydantic>=2,<3",
     "tzdata>=2025.2",
+    "fastapi>=0.115,<1",
+    "uvicorn>=0.30,<1",
+    "jinja2>=3.1,<4",
     "bedrock-agentcore==1.22.0",
 
 ]
@@ -20,6 +23,7 @@ dev = [
     "ruff",
     "mypy",
     "moto[dynamodb]>=5,<6",
+    "httpx>=0.27,<1",
 ]
 
 [tool.ruff]

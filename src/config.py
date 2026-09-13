@@ -43,6 +43,8 @@ class Settings(BaseModel):
     aws_region: str = Field(min_length=1)
     bedrock_model_id: str = Field(min_length=1)
     agentcore_runtime_arn: str | None = None
+    cycle_business_id: str = Field(default="demo-cafe", min_length=1)
+    cycle_proposal_mode: Literal["bedrock", "injected"] = "bedrock"
 
     dynamodb_table_businesses: str = Field(
         default=DEFAULT_DYNAMODB_TABLE_BUSINESSES,
@@ -99,6 +101,11 @@ class Settings(BaseModel):
         notification_mode = os.environ.get("ALLERGUARD_NOTIFICATION_MODE", "disabled")
         return cls(
             aws_region=os.environ.get("AWS_REGION", DEFAULT_AWS_REGION),
+            cycle_business_id=os.environ.get("ALLERGUARD_CYCLE_BUSINESS_ID", "demo-cafe"),
+            cycle_proposal_mode=cast(
+                Literal["bedrock", "injected"],
+                os.environ.get("ALLERGUARD_CYCLE_PROPOSAL_MODE", "bedrock"),
+            ),
             notification_mode=cast(Literal["disabled", "ses", "sns", "log"], notification_mode),
             ses_from_email=os.environ.get("ALLERGUARD_SES_FROM_EMAIL"),
             owner_email=os.environ.get("ALLERGUARD_OWNER_EMAIL"),

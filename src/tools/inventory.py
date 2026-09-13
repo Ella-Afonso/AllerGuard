@@ -89,9 +89,14 @@ def get_business(business_id: str) -> BusinessProfile | None:
     if not business_id.strip():
         raise ValueError("business_id must not be empty.")
 
-    settings = Settings.from_environment()
+    return read_business(business_id, Settings.from_environment())
+
+
+def read_business(business_id: str, settings: Settings) -> BusinessProfile | None:
+    """Read with explicit trusted configuration, including isolated demo tables."""
     response = _table(settings).get_item(
         Key={BUSINESS_PARTITION_KEY: business_id},
+        ConsistentRead=True,
     )
 
     raw_item = response.get("Item")
@@ -120,7 +125,11 @@ def seed_business(profile: BusinessProfile) -> None:
     if not profile.business_id.strip():
         raise ValueError("profile.business_id must not be empty.")
 
-    settings = Settings.from_environment()
+    write_business(profile, Settings.from_environment())
+
+
+def write_business(profile: BusinessProfile, settings: Settings) -> None:
+    """Seed a profile in the explicitly configured table; not a public endpoint."""
     item = profile.model_dump(mode="python")
 
     _table(settings).put_item(Item=item)

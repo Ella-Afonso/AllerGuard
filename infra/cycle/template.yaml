@@ -1,0 +1,119 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: AllerGuard isolated serial cycle proof; notifications disabled
+Parameters:
+  CodeBucket:
+    Type: String
+  CodeKey:
+    Type: String
+  BusinessesTable:
+    Type: String
+  LedgerTable:
+    Type: String
+  AuditTable:
+    Type: String
+  EscalationsTable:
+    Type: String
+  ProposalMode:
+    Type: String
+    Default: injected
+    AllowedValues: [injected, bedrock]
+  ModelId:
+    Type: String
+    Default: eu.anthropic.claude-sonnet-4-5-20250929-v1:0
+  ScheduleState:
+    Type: String
+    Default: DISABLED
+    AllowedValues: [DISABLED, ENABLED]
+Resources:
+  CycleRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: {Service: lambda.amazonaws.com}
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: CycleTablesAndLogs
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: [dynamodb:GetItem, dynamodb:Query, dynamodb:DescribeTable]
+                Resource:
+                  - !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${BusinessesTable}
+                  - !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${LedgerTable}
+                  - !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AuditTable}
+                  - !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${EscalationsTable}
+              - Effect: Allow
+                Action: dynamodb:PutItem
+                Resource:
+                  - !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${LedgerTable}
+                  - !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AuditTable}
+                  - !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${EscalationsTable}
+              - Effect: Deny
+                Action: [dynamodb:UpdateItem, dynamodb:DeleteItem, dynamodb:BatchWriteItem, dynamodb:DeleteTable]
+                Resource:
+                  - !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AuditTable}
+                  - !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${EscalationsTable}
+              - Effect: Allow
+                Action: [logs:CreateLogStream, logs:PutLogEvents]
+                Resource: !GetAtt CycleLogs.Arn
+  CycleFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Runtime: python3.12
+      Architectures: [x86_64]
+      Handler: src.runtime.scheduled_cycle.handler
+      Timeout: 300
+      MemorySize: 1024
+      ReservedConcurrentExecutions: 1
+      LoggingConfig:
+        LogGroup: !Ref CycleLogs
+      Role: !GetAtt CycleRole.Arn
+      Code: {S3Bucket: !Ref CodeBucket, S3Key: !Ref CodeKey}
+      Environment:
+        Variables:
+          ALLERGUARD_DYNAMODB_TABLE_BUSINESSES: !Ref BusinessesTable
+          ALLERGUARD_DYNAMODB_TABLE_ALERTS_SEEN: !Ref LedgerTable
+          ALLERGUARD_DYNAMODB_TABLE_AUDIT: !Ref AuditTable
+          ALLERGUARD_DYNAMODB_TABLE_ESCALATIONS: !Ref EscalationsTable
+          ALLERGUARD_FSA_MODE: replay
+          ALLERGUARD_FSA_FIXTURES_PATH: fixtures/cycle.json
+          ALLERGUARD_NOTIFICATION_MODE: disabled
+          ALLERGUARD_CYCLE_PROPOSAL_MODE: !Ref ProposalMode
+          ALLERGUARD_BEDROCK_MODEL_ID: !Ref ModelId
+  CycleLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /allerguard/cycle/${AWS::StackName}
+      RetentionInDays: 14
+  Schedule:
+    Type: AWS::Events::Rule
+    Properties:
+      ScheduleExpression: rate(15 minutes)
+      State: !Ref ScheduleState
+      Targets:
+        - Arn: !GetAtt CycleFunction.Arn
+          Id: Cycle
+          RetryPolicy: {MaximumRetryAttempts: 0}
+  InvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref CycleFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt Schedule.Arn
+  AsyncPolicy:
+    Type: AWS::Lambda::EventInvokeConfig
+    Properties:
+      FunctionName: !Ref CycleFunction
+      Qualifier: $LATEST
+      MaximumRetryAttempts: 0
+      MaximumEventAgeInSeconds: 900
+Outputs:
+  FunctionName:
+    Value: !Ref CycleFunction
+  ScheduleName:
+    Value: !Ref Schedule

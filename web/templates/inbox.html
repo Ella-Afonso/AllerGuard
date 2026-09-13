@@ -1,0 +1,22 @@
+{% extends "base.html" %}{% block content %}
+<div class="heading"><p class="eyebrow">YOUR ATTENTION, WHERE IT MATTERS</p><h1>Decisions for you.</h1>
+<p>Review the evidence and choose what happens to the draft.</p></div>
+{% if not pending %}<section class="empty"><h2>Nothing needs your review right now.</h2>
+<p>{{ 'Run the replay to assess five historical alerts.' if demo and session and not rows else 'Silent decisions remain visible in the audit trail.' }}</p>
+{% if not session %}<p>Start a demo above to create your own isolated café session.</p>{% endif %}
+<a href="/audit">See the audit trail →</a></section>{% endif %}
+{% for item in pending %}<article class="card tier-{{ item.tier.value if item.tier else 'UNASSESSED' }}">
+<div class="card-top"><span class="chip {{ item.tier.value if item.tier else 'UNASSESSED' }}">{{ item.tier.value if item.tier else 'UNASSESSED' }}</span><span>Awaiting your decision</span></div>
+<h2 class="reason">{{ item.reason }}</h2><p>{{ item.alert_title }}</p>
+{% set source = item.source_url|safe_source %}{% if source %}<a href="{{ source }}" target="_blank" rel="noopener noreferrer">Read the FSA source ↗</a>{% endif %}
+<p class="muted">{{ 'Injected demonstration draft' if demo else item.draft_source.value }} · {{ item.drafter_model_id }}</p>
+<dl>{% for key,value in item.action_pack.model_dump().items() %}<dt>{{ key|replace('_',' ')|title }}</dt><dd>{{ value }}</dd>{% endfor %}</dl>
+{% if demo %}<div class="toolbar"><button data-decision="approve" data-id="{{ item.escalation_id }}">Approve draft</button>
+<button class="secondary" data-edit="{{ item.escalation_id }}">Edit draft</button>
+<button class="secondary" data-decision="decline" data-id="{{ item.escalation_id }}">Decline</button></div>
+<form class="edit-form" id="edit-{{ item.escalation_id }}" data-id="{{ item.escalation_id }}" hidden>
+<label for="pack-{{ item.escalation_id }}">Edited action pack (JSON)</label>
+<textarea id="pack-{{ item.escalation_id }}" name="pack" rows="12" maxlength="12000">{{ item.action_pack.model_dump_json(indent=2) }}</textarea>
+<button type="submit">Record edited draft</button><p class="form-error" role="alert"></p></form>{% endif %}
+</article>{% endfor %}{% endblock %}
+

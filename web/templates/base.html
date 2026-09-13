@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="csrf-token" content="{{ csrf }}"><title>AllerGuard · {{ page|title }}</title>
+<link rel="stylesheet" href="/static/styles.css"><script src="/static/app.js" defer></script></head>
+<body><header class="top"><a class="brand" href="/inbox">AllerGuard<span>Quiet by design.</span></a>
+<nav aria-label="Main navigation">{% for name in ['inbox','audit','diary','business'] %}
+<a href="/{{ name }}" {% if page == name %}aria-current="page"{% endif %}>{{ 'Audit trail' if name == 'audit' else name|title }}</a>
+{% endfor %}</nav></header>
+<main><div class="mode">{{ label }}</div>
+{% if demo %}<p class="muted">Manual replay. Automatic monitoring is not active. Demo history lasts until the server restarts.</p>
+<div class="toolbar"><button data-post="/demo/session">{{ 'Start fresh demo' if session else 'Start demo' }}</button>
+{% if session %}<button data-post="/demo/run">Run replay demo</button>{% endif %}
+<span class="muted">Historical FSA recalls · fictional café</span></div>{% endif %}
+<div id="feedback" role="status" aria-live="polite"></div>
+{% if session %}
+<section class="stats" aria-label="Stored evidence summary">
+<div><strong>{{ pending|length }}</strong><span>Pending decisions</span></div>
+<div><strong>{{ assessed }}</strong><span>Distinct assessments</span></div>
+<div><strong>{{ silent }}</strong><span>Handled silently</span></div>
+<div><strong>{{ rows|length }}</strong><span>Stored events</span></div></section>
+{% if session.last_cycle %}<p class="cycle">Last replay: <b>{{ session.last_cycle.status.value }}</b> · {{ session.last_cycle.retrieved }} retrieved · {{ session.last_cycle.silent }} silent · {{ session.last_cycle.escalated }} escalated.
+{{ session.last_cycle.finished_at.isoformat() }}</p>{% endif %}
+{% endif %}
+{% block content %}{% endblock %}
+<footer>Decisions record a choice. They do not execute stock actions or send customer notices.
+{% if demo %}Specialist proposals and notifications are simulated. No AWS or Bedrock calls.{% endif %}</footer>
+</main></body></html>
+
