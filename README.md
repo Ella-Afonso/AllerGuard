@@ -153,9 +153,10 @@ The test command explicitly excludes paid live Bedrock tests. The recorded 434-t
 
 ## Current limitations
 
-Live SES/SNS delivery and inbox receipt remain unverified. The complete product has not been deployed to AgentCore; the earlier AgentCore hello-agent proof was a separate, smaller deployment. Live FSA polling in the scheduled cycle and live supervisor delegation remain outside the recorded proof.
-
-Menu extraction, automatic stock actions, and customer-message execution are not implemented. External delivery is not guaranteed exactly once. The diary and exports support review; they do not certify food-safety compliance.
+- The public Pages site is a browser-only interactive demo. Its notifications, owner decisions, diary entries, and exports are simulated.
+- The demo uses public recall information and a fictional, read-only café inventory.
+- Menu and PDF inventory extraction are not included.
+- The diary and exports support review and record-keeping; they are not food-safety compliance certification.
 
 ## Data, attribution, and licence
 
