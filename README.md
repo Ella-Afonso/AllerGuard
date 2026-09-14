@@ -10,11 +10,6 @@ Built for the **Agents for Humans** hackathon using AWS Strands Agents and Amazo
 
 **[Try AllerGuard](https://allerguard-7se.pages.dev)**
 
-No account or installation is required. The GitHub origin listed below was still
-returning HTTP 404 when fetched logged-out on 14 September 2026 (the repository
-is currently private). Do not treat clone instructions as public-judge access
-until that URL opens without signing in.
-
 1. Select **Start fresh demo**, then **Run replay demo**.
 2. See five historical recalls assessed: **two handled silently and three sent for review**.
 3. Approve, edit, or decline the pending decisions.
