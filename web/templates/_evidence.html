@@ -1,0 +1,93 @@
+<details class="inspect"><summary>Inspect stored evidence</summary>
+<div class="evidence">
+{% if row.event.value in ['diary_filed', 'diary_confirmed', 'diary_error'] %}
+{% if row.event.value == 'diary_filed' and row.diary %}
+<h3>Daily diary filing</h3>
+<dl class="facts">
+<dt>Diary date</dt><dd>{{ row.entry_date|display_date }}</dd>
+<dt>Filed at</dt><dd>{{ row.timestamp|display_time }}</dd>
+<dt>Evidence cutoff</dt><dd>{{ row.diary.evidence_cutoff|display_time }}</dd>
+<dt>Opening</dt><dd>unconfirmed</dd>
+<dt>Closing</dt><dd>unconfirmed</dd>
+<dt>Summary source</dt><dd>{{ row.diary.summary_source.value }} · {{ row.diary.summary_model_id }}</dd>
+</dl>
+<p>{{ row.diary.summary }}</p>
+<h3>Linked recall decisions</h3>
+{% if row.diary.recall_actions %}<ul>{% for link in row.diary.recall_actions %}
+<li>{{ link.alert_title }} · {{ link.state }}</li>
+{% endfor %}</ul>{% else %}<p>No linked recall evidence yet.</p>{% endif %}
+{% elif row.event.value == 'diary_confirmed' and row.confirmation %}
+<h3>Diary confirmation</h3>
+<dl class="facts">
+<dt>Recorded at</dt><dd>{{ row.timestamp|display_time }}</dd>
+<dt>Opening result</dt><dd>{{ row.confirmation.opening_status.value }}</dd>
+<dt>Closing result</dt><dd>{{ row.confirmation.closing_status.value }}</dd>
+<dt>Note</dt><dd>{{ row.confirmation.note or 'None' }}</dd>
+<dt>Confirmation mode</dt><dd>{{ row.confirmation.mode }}</dd>
+</dl>
+<p>First answers retained.</p>
+{% else %}
+<h3>Diary error</h3>
+<p>{{ row.error_type }}</p>
+{% endif %}
+{% else %}
+{% if row.event.value == 'decision_recorded' and row.owner_decision %}
+<h3>Owner decision</h3>
+<dl class="facts">
+<dt>Decision</dt><dd>{{ row.owner_decision.decision|owner_choice }}</dd>
+<dt>Recorded at</dt><dd>{{ row.timestamp|display_time }}</dd>
+<dt>Recall title</dt><dd>{{ row.alert_title }}</dd>
+<dt>Alert reference</dt><dd>{{ row.alert_id }}</dd>
+</dl>
+<h3>Original draft</h3>
+<dl class="facts">
+<dt>Stock-pull draft</dt><dd>{{ row.owner_decision.original_action_pack.pull }}</dd>
+<dt>Staff note</dt><dd>{{ row.owner_decision.original_action_pack.staff_note }}</dd>
+<dt>Customer notice — draft only</dt><dd>{{ row.owner_decision.original_action_pack.customer_notice }}</dd>
+<dt>Substitution</dt><dd>{{ row.owner_decision.original_action_pack.substitution }}</dd>
+</dl>
+{% if row.owner_decision.edited_pack %}
+<h3>Edited draft</h3>
+<dl class="facts">
+<dt>Stock-pull draft</dt><dd>{{ row.owner_decision.edited_pack.pull }}</dd>
+<dt>Staff note</dt><dd>{{ row.owner_decision.edited_pack.staff_note }}</dd>
+<dt>Customer notice — draft only</dt><dd>{{ row.owner_decision.edited_pack.customer_notice }}</dd>
+<dt>Substitution</dt><dd>{{ row.owner_decision.edited_pack.substitution }}</dd>
+</dl>
+{% endif %}
+<p>This records an owner choice. It does not execute stock or customer actions.</p>
+{% else %}
+<h3>Assessment</h3>
+<dl class="facts">
+<dt>Alert reference</dt><dd>{{ row.alert_id }}</dd>
+<dt>Assessment recorded</dt><dd>{{ row.timestamp|display_time }}</dd>
+<dt>Assessment result</dt><dd>{{ row.tier|assessment_result }}</dd>
+<dt>Gate result</dt><dd>{{ row.decision|gate_result }}</dd>
+<dt>Explanation</dt><dd>{{ row.reason }}</dd>
+<dt>Policy</dt><dd>{{ row.policy_version }}</dd>
+<dt>Assessment source</dt><dd>{{ row.mode|assessment_source(row.draft_source) }}</dd>
+</dl>
+<h3>Recorded business context</h3>
+<dl class="facts">
+<dt>Business</dt><dd>{{ row.business_id }}</dd>
+<dt>Matching candidates</dt><dd>{{ row.candidate_ids|join(', ') if row.candidate_ids else 'No recorded candidates' }}</dd>
+<dt>Matched inventory</dt><dd>{{ row.matched_items|join(', ') if row.matched_items else 'No recorded inventory link' }}</dd>
+<dt>Source alert</dt><dd>{% set source = row.source_url|safe_source %}{% if source %}<a href="{{ source }}" target="_blank" rel="noopener noreferrer">Open FSA source ↗</a>{% else %}{{ row.source_url }}{% endif %}</dd>
+</dl>
+{% if row.event.value == 'escalation_queued' %}
+<h3>Notification / decision</h3>
+<dl class="facts"><dt>Queue status</dt><dd>Queued for owner review</dd></dl>
+<p>Recording a choice does not execute stock or customer actions.</p>
+{% endif %}
+{% if row.notification %}
+<h3>Notification / decision</h3>
+<dl class="facts">
+<dt>Simulated notification outcome</dt><dd>{{ row.notification.outcome.value }} · {{ row.notification.provider.value }} · {{ row.notification.mode.value }}</dd>
+</dl>
+<p>Provider acceptance does not prove inbox receipt. Recording a choice does not execute stock or customer actions.</p>
+{% endif %}
+{% endif %}
+{% endif %}
+</div>
+<p class="muted">This event is retained in the append-only audit trail.</p>
+</details>

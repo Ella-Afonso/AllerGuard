@@ -19,6 +19,14 @@ async function send(path, payload = {}) {
     throw error;
   } finally { busy = false; }
 }
+function packFromForm(form) {
+  return {
+    pull: form.elements.pull.value,
+    staff_note: form.elements.staff_note.value,
+    customer_notice: form.elements.customer_notice.value,
+    substitution: form.elements.substitution.value
+  };
+}
 document.querySelectorAll("[data-post]").forEach(button => {
   button.addEventListener("click", () => send(button.dataset.post).catch(() => {}));
 });
@@ -31,7 +39,15 @@ document.querySelectorAll("[data-edit]").forEach(button => {
   button.addEventListener("click", () => {
     const form = document.getElementById("edit-" + button.dataset.edit);
     form.hidden = !form.hidden;
-    if (!form.hidden) form.querySelector("textarea").focus();
+    if (!form.hidden) form.querySelector("[name=pull]").focus();
+  });
+});
+document.querySelectorAll("[data-cancel-edit]").forEach(button => {
+  button.addEventListener("click", () => {
+    const form = button.closest("form");
+    form.reset();
+    form.querySelector(".form-error").textContent = "";
+    form.hidden = true;
   });
 });
 document.querySelectorAll(".edit-form").forEach(form => {
@@ -41,7 +57,7 @@ document.querySelectorAll(".edit-form").forEach(form => {
     error.textContent = "";
     try {
       await send("/api/decisions", {escalation_id: form.dataset.id, choice: "edit",
-        pack: JSON.parse(form.elements.pack.value)});
+        pack: packFromForm(form)});
     } catch (failure) { error.textContent = failure.message; }
   });
 });
@@ -54,4 +70,3 @@ if (diary) diary.addEventListener("submit", async event => {
       mode: "simulated"});
   } catch (failure) { diary.querySelector(".form-error").textContent = failure.message; }
 });
-

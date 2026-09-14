@@ -1,7 +1,6 @@
 """Both evidence formats are complete and read-only, including hostile note text."""
 
 import csv
-import json
 from datetime import timedelta
 from pathlib import Path
 from unittest.mock import patch
@@ -43,12 +42,17 @@ def test_complete_export_escaping_and_no_writes(audit_settings: Settings, tmp_pa
     with result.csv_path.open(encoding="utf-8-sig", newline="") as stream:
         rows = list(csv.DictReader(stream))
     assert len(rows) == 3
-    confirmation = next(row for row in rows if row["event_type"] == "diary_confirmed")
+    confirmation = next(row for row in rows if row["event_label"] == "Diary confirmation recorded")
     assert confirmation["notes"] == "'" + note
-    assert json.loads(confirmation["payload_json"])["confirmation"]["note"] == note
+    assert "payload_json" not in confirmation
     html = result.html_path.read_text(encoding="utf-8")
     assert "Daily diary" in html and "&lt;script&gt;" in html and "<script>" not in html
-    assert "View decision evidence" in html
+    assert "Technical evidence" not in html
+    assert "payload_json" not in html
+    assert "display_time" in confirmation
+    assert "raw_timestamp" not in confirmation
+    assert "event_id" not in confirmation
+    assert "PUBLIC BROWSER SIMULATION" not in result.csv_path.read_text(encoding="utf-8-sig")
     assert audit.list_history("demo-cafe", audit_settings) == before
 
 

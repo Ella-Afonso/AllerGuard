@@ -4,12 +4,13 @@ Target a clear recording of about 4 minutes 30 seconds. This is a proposed scrip
 
 ## Before recording
 
-1. Publish the reviewed `pages-demo/` fixes and check the public link in a private browser window. Local fixes do not change an already deployed site.
-2. Run the checks in the root README, plus `node --test tests/pages_demo.test.cjs` (Node.js required for the browser-state regression tests).
-3. Start the local Python dashboard with `python -m scripts.serve_dashboard`. Keep the public Pages tab and local application clearly labelled.
-4. Prepare the existing AWS proof logs or screenshots, the cycle infrastructure README, and the architecture diagram. Use recorded evidence; there is no need to re-enable the schedule to record the video.
-5. Hide account details, terminal credentials and unrelated tabs. Use only the fictional café and public historical recalls.
-6. Rehearse once. Confirm 5 assessments, 2 silent outcomes and 3 pending reviews. Refresh or start a fresh session before recording.
+1. Make https://github.com/Ella-Afonso/AllerGuard public, then confirm it and the MIT licence open logged-out. A private repo is a Stage-One fail.
+2. Recheck https://allerguard-7se.pages.dev logged-out. The 14 September 2026 audit found the CSP fix and owner Approve already deployed; still confirm Start fresh → Run replay → one decision before recording.
+3. Run the checks in the root README, plus `node --test tests/pages_demo.test.cjs` (Node.js required for the browser-state regression tests).
+4. Start the local Python dashboard with `python -m scripts.serve_dashboard`. Keep the public Pages tab and local application clearly labelled. On the Python dashboard, times should read as Europe/London (`14 Sep 2026, 12:22 BST`), not raw ISO. The public Pages copy matches only after a republish of the local `pages-demo/` changes.
+5. Prepare the existing AWS proof logs or screenshots, the cycle infrastructure README, and the architecture diagram. Use recorded evidence; there is no need to re-enable the schedule to record the video. The proof invocations were 10 minutes apart; the current template is `rate(15 minutes)`.
+6. Hide account details, terminal credentials and unrelated tabs. Use only the fictional café and public historical recalls.
+7. Rehearse once. Confirm 5 assessments, 2 silent outcomes and 3 pending reviews. Refresh or start a fresh session before recording.
 
 ## Screen-by-screen script
 

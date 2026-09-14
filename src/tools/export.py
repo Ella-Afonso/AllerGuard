@@ -11,6 +11,14 @@ from pydantic import BaseModel, ConfigDict
 from src.config import Settings
 from src.domain.diary import DiaryEvent, DiaryRecord, DiaryView, build_diary_view, business_date
 from src.domain.models import AuditEntry
+from src.domain.presentation import (
+    assessment_result_label,
+    event_display_label,
+    format_display_date,
+    format_display_time,
+    gate_result_label,
+    owner_choice_label,
+)
 from src.tools.audit import HistoryRecord, list_history
 from src.tools.audit_report import write_audit_report
 
@@ -23,7 +31,7 @@ class ExportResult(BaseModel):
 
 
 def spreadsheet_text(value: str) -> str:
-    """Keep human text literal in spreadsheets; payload JSON retains the original."""
+    """Keep human text literal in spreadsheets."""
     if value.startswith(("\t", "\r", "\n")) or value.lstrip().startswith(("=", "+", "-", "@")):
         return "'" + value
     return value
@@ -51,19 +59,23 @@ def diary_views(rows: list[HistoryRecord], *, as_of: datetime) -> list[DiaryView
 def write_csv(rows: list[HistoryRecord], output: Path) -> Path:
     output.parent.mkdir(parents=True, exist_ok=True)
     fields = (
-        "event_id",
-        "event_type",
-        "timestamp",
-        "business_id",
-        "diary_date",
-        "assessment_id",
-        "alert_id",
+        "display_time",
+        "event_label",
+        "alert_reference",
         "alert_title",
+        "tier",
+        "gate_result",
         "owner_choice",
+        "reason",
+        "pull",
+        "staff_note",
+        "customer_notice",
+        "substitution",
         "opening_status",
         "closing_status",
         "notes",
-        "payload_json",
+        "diary_date",
+        "business_id",
     )
     with output.open("w", encoding="utf-8-sig", newline="") as stream:
         writer = csv.DictWriter(stream, fieldnames=fields)
@@ -71,22 +83,31 @@ def write_csv(rows: list[HistoryRecord], output: Path) -> Path:
         for row in sorted(rows, key=lambda item: (item.timestamp, item.entry_id)):
             values = {field: "" for field in fields}
             values.update(
-                event_id=row.entry_id,
-                event_type=row.event.value,
-                timestamp=row.timestamp.isoformat(),
+                display_time=format_display_time(row.timestamp),
+                event_label=event_display_label(row.event),
                 business_id=row.business_id,
-                payload_json=row.model_dump_json(),
             )
             if isinstance(row, AuditEntry):
-                values.update(
-                    assessment_id=row.assessment_id,
-                    alert_id=row.alert_id,
-                    alert_title=row.alert_title,
-                )
+                pack = None
                 if row.owner_decision is not None:
-                    values["owner_choice"] = row.owner_decision.decision.value
+                    pack = row.owner_decision.edited_pack or row.owner_decision.original_action_pack
+                    values["owner_choice"] = owner_choice_label(row.owner_decision.decision)
+                values.update(
+                    alert_reference=row.alert_id,
+                    alert_title=row.alert_title,
+                    tier=assessment_result_label(row.tier),
+                    gate_result=gate_result_label(row.decision),
+                    reason=row.reason,
+                )
+                if pack is not None:
+                    values.update(
+                        pull=pack.pull,
+                        staff_note=pack.staff_note,
+                        customer_notice=pack.customer_notice,
+                        substitution=pack.substitution,
+                    )
             else:
-                values["diary_date"] = row.entry_date.isoformat()
+                values["diary_date"] = format_display_date(row.entry_date)
                 if row.diary is not None:
                     values.update(
                         opening_status=row.diary.opening_status.value,

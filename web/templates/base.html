@@ -1,28 +1,63 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="csrf-token" content="{{ csrf }}"><title>AllerGuard · {{ page|title }}</title>
+<meta name="csrf-token" content="{{ csrf }}"><meta name="theme-color" content="#2F4CB0">
+<title>AllerGuard · {{ page|title }}</title>
 <link rel="stylesheet" href="/static/styles.css"><script src="/static/app.js" defer></script></head>
-<body><header class="top"><a class="brand" href="/inbox">AllerGuard<span>Quiet by design.</span></a>
+<body class="app">
+<a class="skip" href="#workspace">Skip to workspace</a>
+<aside class="rail" aria-label="AllerGuard">
+<a class="brand" href="/inbox">AllerGuard<span>Quiet by design.</span></a>
+<p class="rail-kicker">{{ 'Interactive replay demo' if demo else 'Stored evidence' }}</p>
 <nav aria-label="Main navigation">{% for name in ['inbox','audit','diary','business'] %}
 <a href="/{{ name }}" {% if page == name %}aria-current="page"{% endif %}>{{ 'Audit trail' if name == 'audit' else name|title }}</a>
-{% endfor %}</nav></header>
-<main><div class="mode">{{ label }}</div>
-{% if demo %}<p class="muted">Manual replay. Automatic monitoring is not active. Demo history lasts until the server restarts.</p>
-<div class="toolbar"><button data-post="/demo/session">{{ 'Start fresh demo' if session else 'Start demo' }}</button>
+{% endfor %}</nav>
+<p class="rail-note">{% if demo %}Manual replay. Automatic monitoring is not active. Demo history lasts until the server restarts.{% else %}Read-only evidence. This view does not start monitoring.{% endif %}</p>
+</aside>
+<div class="shell">
+<header class="mast">
+<p class="mode">{{ label }}</p>
+{% if demo %}<div class="toolbar"><button data-post="/demo/session">{{ 'Start fresh demo' if session else 'Start demo' }}</button>
 {% if session %}<button data-post="/demo/run">Run replay demo</button>{% endif %}
 <span class="muted">Historical FSA recalls · fictional café</span></div>{% endif %}
 <div id="feedback" role="status" aria-live="polite"></div>
-{% if session %}
-<section class="stats" aria-label="Stored evidence summary">
-<div><strong>{{ pending|length }}</strong><span>Pending decisions</span></div>
-<div><strong>{{ assessed }}</strong><span>Distinct assessments</span></div>
-<div><strong>{{ silent }}</strong><span>Handled silently</span></div>
-<div><strong>{{ rows|length }}</strong><span>Stored events</span></div></section>
-{% if session.last_cycle %}<p class="cycle">Last replay: <b>{{ session.last_cycle.status.value }}</b> · {{ session.last_cycle.retrieved }} retrieved · {{ session.last_cycle.silent }} silent · {{ session.last_cycle.escalated }} escalated.
-{{ session.last_cycle.finished_at.isoformat() }}</p>{% endif %}
-{% endif %}
+{% if session and session.last_cycle %}<p class="cycle">Last replay: <b>{{ session.last_cycle.status.value }}</b> · {{ session.last_cycle.retrieved }} retrieved · {{ session.last_cycle.silent }} silent · {{ session.last_cycle.escalated }} escalated.
+<time>{{ session.last_cycle.finished_at|display_time }}</time></p>{% endif %}
+</header>
+<div class="workspace-grid">
+<main id="workspace" class="workspace">
 {% block content %}{% endblock %}
 <footer>Decisions record a choice. They do not execute stock actions or send customer notices.
 {% if demo %}Specialist proposals and notifications are simulated. No AWS or Bedrock calls.{% endif %}</footer>
-</main></body></html>
-
+</main>
+<aside class="context" aria-label="How AllerGuard works">
+<details class="panel" open>
+<summary>How AllerGuard works</summary>
+<ol>
+<li>Reviews public FSA recall alerts against recorded inventory.</li>
+<li>Keeps unrelated alerts quiet, but records them.</li>
+<li>Escalates relevant or uncertain alerts for an owner decision.</li>
+<li>Records evidence and diary entries.</li>
+</ol>
+</details>
+<details class="panel" open>
+<summary>Safety boundaries</summary>
+<ul>
+<li>Decisions record a choice.</li>
+<li>No stock or customer action is executed.</li>
+{% if demo %}<li>Specialist proposals and notifications are simulated in replay mode.</li>
+{% else %}<li>This surface presents stored evidence only.</li>{% endif %}
+</ul>
+</details>
+{% if session %}<section class="panel session-panel" aria-label="Current session">
+<h2>This session</h2>
+<dl class="session-stats">
+<dt>Pending decisions</dt><dd>{{ pending|length }}</dd>
+<dt>Distinct assessments</dt><dd>{{ assessed }}</dd>
+<dt>Silent outcomes</dt><dd>{{ silent }}</dd>
+<dt>Stored evidence</dt><dd>{{ rows|length }}</dd>
+</dl>
+</section>{% endif %}
+</aside>
+</div>
+</div>
+</body></html>

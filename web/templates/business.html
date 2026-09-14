@@ -1,7 +1,8 @@
 {% extends "base.html" %}{% block content %}
 <div class="heading"><p class="eyebrow">THE CONTEXT BEHIND EACH DECISION</p><h1>Your café, understood.</h1><p>Read-only fictional inventory. Menu upload is not available in this version.</p></div>
 {% if session %}<h2>{{ session.business.name }}</h2><p>Handled allergens: {{ session.business.handled_allergens|join(', ') }}</p>
+<div class="inventory-grid">
 {% for item in session.business.inventory %}<article class="card"><h2>{{ item.name }}</h2><p>{{ item.kind|title }}{% if item.brand %} · {{ item.brand }}{% endif %}</p>
 <dl><dt>Ingredients</dt><dd>{{ item.ingredients|join(', ') or 'None recorded' }}</dd><dt>Allergens</dt><dd>{{ item.allergens|join(', ') or 'None recorded' }}</dd><dt>Supplier</dt><dd>{{ item.supplier or 'None recorded' }}</dd><dt>Batch codes</dt><dd>{{ item.batch_codes|join(', ') or 'Unknown' }}</dd></dl></article>{% endfor %}
+</div>
 {% else %}<p>Start a demo to load the fictional café.</p>{% endif %}{% endblock %}
-

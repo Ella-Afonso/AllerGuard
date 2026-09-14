@@ -20,6 +20,16 @@ from fastapi.templating import Jinja2Templates
 from src.config import Settings
 from src.domain.diary import DiaryConfirmation, business_date
 from src.domain.models import AuditEntry
+from src.domain.presentation import (
+    assessment_result_label,
+    assessment_source_label,
+    event_display_label,
+    format_display_date,
+    format_display_time,
+    gate_result_label,
+    owner_choice_label,
+    short_evidence_reference,
+)
 from src.domain.surface import DecisionRequest
 from src.runtime import surface
 from src.tools import audit, inventory
@@ -66,6 +76,14 @@ def create_app(
     app.state.sessions = manager
     templates = Jinja2Templates(directory=str(WEB / "templates"))
     templates.env.filters["safe_source"] = safe_source
+    templates.env.filters["display_time"] = format_display_time
+    templates.env.filters["display_date"] = format_display_date
+    templates.env.filters["event_label"] = event_display_label
+    templates.env.filters["evidence_ref"] = short_evidence_reference
+    templates.env.filters["assessment_result"] = assessment_result_label
+    templates.env.filters["gate_result"] = gate_result_label
+    templates.env.filters["assessment_source"] = assessment_source_label
+    templates.env.filters["owner_choice"] = owner_choice_label
     app.mount("/static", StaticFiles(directory=str(WEB / "static")), name="static")
     allowed_host = urlsplit(origin).netloc
     secure = urlsplit(origin).scheme == "https"

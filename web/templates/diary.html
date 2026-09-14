@@ -1,21 +1,29 @@
 {% extends "base.html" %}{% block content %}
-<div class="heading"><p class="eyebrow">ONE DAILY RECORD</p><h1>Today, accounted for.</h1><p>{{ day }} · Europe/London</p></div>
+<div class="heading"><p class="eyebrow">ONE DAILY RECORD</p><h1>Today, accounted for.</h1><p>{{ day|display_date }} · Europe/London</p></div>
 {% if not diary %}<section class="empty"><h2>No diary filed for today.</h2>
 {% if demo and session %}<button data-post="/api/diary/file">Prepare today's diary</button>{% endif %}
 <p>Preparing the record does not confirm opening or closing tasks.</p></section>
-{% else %}<article class="card"><h2>Original filing</h2><p>{{ diary.filed.diary.summary }}</p>
+{% else %}<div class="timeline">
+<article class="card"><h2>Original filing</h2><p>{{ diary.filed.diary.summary }}</p>
 <p>Opening: <b>unconfirmed</b> · Closing: <b>unconfirmed</b></p>
-<p class="muted">Evidence cutoff: {{ diary.filed.diary.evidence_cutoff.isoformat() }}</p>
+<p class="muted">Filed {{ diary.filed.diary.filed_at|display_time }}. Evidence cutoff {{ diary.filed.diary.evidence_cutoff|display_time }}.</p>
+</article>
+<article class="card">
 {% if diary.confirmation %}<h2>Stored owner confirmation</h2>
 <p>Opening: {{ diary.confirmation.confirmation.opening_status.value }} · Closing: {{ diary.confirmation.confirmation.closing_status.value }}</p>
-<p>{{ diary.confirmation.confirmation.note }}</p><p class="muted">Mode: {{ diary.confirmation.confirmation.mode }}. Stored first answers retained.</p>
+<p>{{ diary.confirmation.confirmation.note }}</p><p class="muted">Recorded {{ diary.confirmation.timestamp|display_time }}. Mode: {{ diary.confirmation.confirmation.mode }}. Stored first answers retained.</p>
 {% elif demo %}<h2>Your explicit answers</h2><p>Opening and closing await explicit owner confirmation.</p>
 <form id="diary-confirm">
 {% for name in ['opening','closing'] %}<label for="{{ name }}">{{ name|title }}</label>
 <select id="{{ name }}" name="{{ name }}_status" required><option value="" selected disabled>Choose an answer</option><option value="confirmed">Confirmed</option><option value="exception">Exception</option></select>{% endfor %}
 <label for="note">Exception note (required if either answer is Exception)</label><textarea id="note" name="note" maxlength="2000" rows="3"></textarea>
 <button type="submit">Record my answers</button><p class="form-error" role="alert"></p></form>
-{% endif %}</article>
-<section><h2>Linked recall decisions</h2>{% for link in diary.current_recall_actions %}<article class="card"><span class="chip">{{ link.state }}</span><h3>{{ link.alert_title }}</h3><p class="muted">{{ link.event_id }}</p></article>{% else %}<p>No linked recall evidence yet.</p>{% endfor %}
+{% else %}<h2>Owner confirmation</h2><p>Opening and closing await explicit owner confirmation.</p>{% endif %}
+</article>
+</div>
+<section class="timeline"><h2>Linked recall decisions</h2>{% for link in diary.current_recall_actions %}<article class="card"><span class="chip {{ link.state }}">{{ link.state }}</span><h3>{{ link.alert_title }}</h3>
+<p>Recorded {{ link.evidence_at|display_time }}</p>
+<p>Owner choice: {{ link.state|owner_choice }}</p>
+<p><a href="/audit">View audit trail</a></p>
+</article>{% else %}<p>No linked recall evidence yet.</p>{% endfor %}
 {% if diary.additional_links %}<p class="muted">{{ diary.additional_links|length }} links arrived after filing; the original filing is preserved.</p>{% endif %}</section>{% endif %}{% endblock %}
-

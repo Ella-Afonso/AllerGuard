@@ -4,99 +4,82 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="description" content="AllerGuard: Conservative autonomous food-recall monitoring for small UK food businesses. Interactive public demo with browser-only simulation.">
-<meta name="theme-color" content="#0F7A6B">
+<meta name="theme-color" content="#2F4CB0">
 <title>AllerGuard · Interactive Public Demo</title>
 <link rel="stylesheet" href="styles.css">
 <script src="data.js" defer></script>
 <script src="app.js" defer></script>
 <!-- GitHub repository: [Add public repository URL here after deployment] -->
 </head>
-<body>
-
-<header class="top">
+<body class="app">
+<a class="skip" href="#workspace">Skip to workspace</a>
+<aside class="rail" aria-label="AllerGuard">
   <a class="brand" href="#inbox" data-nav="inbox">
     AllerGuard
     <span>Quiet by design.</span>
   </a>
+  <p class="rail-kicker">Public interactive demo</p>
   <nav aria-label="Main navigation">
     <a href="#inbox" data-nav="inbox" aria-current="page">Inbox</a>
     <a href="#audit" data-nav="audit">Audit trail</a>
     <a href="#diary" data-nav="diary">Diary</a>
     <a href="#business" data-nav="business">Business</a>
   </nav>
-</header>
+  <p class="rail-note">Browser-only simulation. This page does not call Python, AWS, Bedrock, DynamoDB, SES or SNS.</p>
+</aside>
 
-<main>
-
-  <!-- PUBLIC DEMO DISCLOSURE -->
+<div class="shell">
+<header class="mast">
   <div class="disclosure">
     <strong>PUBLIC INTERACTIVE DEMO</strong>
     <p>Synthetic/public recall data · browser-only simulation · simulated notifications · no stock or customer action</p>
   </div>
+  <div class="toolbar">
+    <button id="start-fresh">Start fresh demo</button>
+    <button id="run-replay" disabled>Run replay demo</button>
+    <span class="muted">Historical FSA recalls · fictional café</span>
+  </div>
+  <div id="feedback" role="status" aria-live="polite"></div>
+  <p id="cycle-status" class="cycle" hidden></p>
+</header>
 
-  <!-- PROJECT DESCRIPTION -->
-  <section id="intro" class="intro-section">
-    <h1>AllerGuard monitors food-recall alerts, stays quiet for irrelevant alerts, escalates uncertain or relevant matches for owner review, and records evidence for every outcome.</h1>
-
-    <div class="toolbar">
-      <button id="start-fresh" class="primary-btn">Start fresh demo</button>
-      <button id="run-replay" class="primary-btn" disabled>Run replay demo</button>
-      <span class="muted">Historical FSA recalls · fictional café</span>
-    </div>
-
-    <div id="feedback" role="status" aria-live="polite"></div>
-
-    <div id="summary" class="stats" hidden>
-      <div><strong id="stat-pending">0</strong><span>Pending decisions</span></div>
-      <div><strong id="stat-assessed">0</strong><span>Distinct assessments</span></div>
-      <div><strong id="stat-silent">0</strong><span>Handled silently</span></div>
-      <div><strong id="stat-events">0</strong><span>Stored events</span></div>
-    </div>
-
-    <p id="cycle-status" class="cycle" hidden></p>
-  </section>
-
-  <!-- INBOX VIEW -->
+<div class="workspace-grid">
+<main id="workspace" class="workspace">
   <div id="view-inbox" class="view active">
     <div class="heading">
       <p class="eyebrow">YOUR ATTENTION, WHERE IT MATTERS</p>
       <h1>Decisions for you.</h1>
       <p>Review the evidence and choose what happens to the draft.</p>
     </div>
-
-    <section id="inbox-content" class="empty">
-      <h2>Nothing needs your review right now.</h2>
-      <p>Run the replay demo to assess five historical alerts.</p>
-      <p>Start a demo above to create your own isolated café session.</p>
+    <section id="inbox-content">
+      <div class="empty">
+        <h2>Nothing needs your review right now.</h2>
+        <p>Run the replay demo to assess five historical alerts.</p>
+        <p>Start a demo above to create your own isolated café session.</p>
+      </div>
     </section>
   </div>
 
-  <!-- AUDIT VIEW -->
   <div id="view-audit" class="view">
     <div class="heading">
       <p class="eyebrow">EVERY DECISION HAS A RECORD</p>
       <h1>The work you didn't have to do.</h1>
       <p>Silent assessments, drafts, notifications and owner choices in one history.</p>
     </div>
-
-    <div class="toolbar">
+    <div class="toolbar audit-toolbar">
       <button id="export-csv" class="button" disabled>Download CSV</button>
       <button id="export-html" class="button secondary" disabled>Download HTML evidence</button>
     </div>
-
     <p class="muted">Events are historical records, not current pending totals. Repeated titles show separate linked events. This audit is browser-local simulation evidence.</p>
-
     <section id="audit-content"></section>
   </div>
 
-  <!-- DIARY VIEW -->
   <div id="view-diary" class="view">
     <div class="heading">
       <p class="eyebrow">ONE DAILY RECORD</p>
       <h1>Today, accounted for.</h1>
       <p id="diary-date"></p>
     </div>
-
     <section id="diary-content">
       <div class="empty">
         <h2>No diary filed for today.</h2>
@@ -106,20 +89,17 @@
     </section>
   </div>
 
-  <!-- BUSINESS VIEW -->
   <div id="view-business" class="view">
     <div class="heading">
       <p class="eyebrow">THE CONTEXT BEHIND EACH DECISION</p>
       <h1>Your café, understood.</h1>
       <p>Read-only fictional inventory. Menu upload is not available in this version.</p>
     </div>
-
     <section id="business-content">
       <p>Start a demo to load the fictional café.</p>
     </section>
   </div>
 
-  <!-- AWS EVIDENCE SECTION -->
   <section id="aws-evidence" class="evidence-section" hidden>
     <h2>Verified AWS Proof</h2>
     <div class="card">
@@ -127,7 +107,7 @@
       <ul>
         <li>Stack: <code>allerguard-cycle-proof-v2</code> in <code>eu-west-2</code></li>
         <li>First proof (2026-09-13 22:00:27 UTC): 5 alerts processed, 2 silent, 3 escalated</li>
-        <li>8 audit records and 3 queued reviews persisted to DynamoDB</li>
+        <li>Stored afterwards: 8 audit rows, 3 queued reviews, 6 ledger rows, 1 business row</li>
         <li>Later scheduled poll (2026-09-13 22:10:28 UTC): empty with unchanged watermark</li>
         <li>Notifications disabled throughout</li>
       </ul>
@@ -142,8 +122,37 @@
     <p>Decisions record a choice. They do not execute stock actions or send customer notices. Specialist proposals and notifications are simulated. No AWS or Bedrock calls from this browser.</p>
     <p class="muted">AllerGuard · 2026 · Public demonstration only</p>
   </footer>
-
 </main>
 
+<aside class="context" aria-label="How AllerGuard works">
+  <details class="panel" open>
+    <summary>How AllerGuard works</summary>
+    <ol>
+      <li>Reviews public FSA recall alerts against recorded inventory.</li>
+      <li>Keeps unrelated alerts quiet, but records them.</li>
+      <li>Escalates relevant or uncertain alerts for an owner decision.</li>
+      <li>Records evidence and diary entries.</li>
+    </ol>
+  </details>
+  <details class="panel" open>
+    <summary>Safety boundaries</summary>
+    <ul>
+      <li>Decisions record a choice.</li>
+      <li>No stock or customer action is executed.</li>
+      <li>Specialist proposals and notifications are simulated in this public browser demo.</li>
+    </ul>
+  </details>
+  <section id="summary" class="panel session-panel" aria-label="Current session" hidden>
+    <h2>This session</h2>
+    <dl class="session-stats">
+      <dt>Pending decisions</dt><dd id="stat-pending">0</dd>
+      <dt>Distinct assessments</dt><dd id="stat-assessed">0</dd>
+      <dt>Silent outcomes</dt><dd id="stat-silent">0</dd>
+      <dt>Stored evidence</dt><dd id="stat-events">0</dd>
+    </dl>
+  </section>
+</aside>
+</div>
+</div>
 </body>
 </html>

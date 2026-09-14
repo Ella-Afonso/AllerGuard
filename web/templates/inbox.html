@@ -10,13 +10,32 @@
 <h2 class="reason">{{ item.reason }}</h2><p>{{ item.alert_title }}</p>
 {% set source = item.source_url|safe_source %}{% if source %}<a href="{{ source }}" target="_blank" rel="noopener noreferrer">Read the FSA source ↗</a>{% endif %}
 <p class="muted">{{ 'Injected demonstration draft' if demo else item.draft_source.value }} · {{ item.drafter_model_id }}</p>
-<dl>{% for key,value in item.action_pack.model_dump().items() %}<dt>{{ key|replace('_',' ')|title }}</dt><dd>{{ value }}</dd>{% endfor %}</dl>
+<dl>
+<dt>Stock-pull draft</dt><dd>{{ item.action_pack.pull }}</dd>
+<dt>Staff note</dt><dd>{{ item.action_pack.staff_note }}</dd>
+<dt>Customer notice — draft only</dt><dd>{{ item.action_pack.customer_notice }}</dd>
+<dt>Substitution</dt><dd>{{ item.action_pack.substitution }}</dd>
+</dl>
 {% if demo %}<div class="toolbar"><button data-decision="approve" data-id="{{ item.escalation_id }}">Approve draft</button>
 <button class="secondary" data-edit="{{ item.escalation_id }}">Edit draft</button>
-<button class="secondary" data-decision="decline" data-id="{{ item.escalation_id }}">Decline</button></div>
+<button class="choice-decline" data-decision="decline" data-id="{{ item.escalation_id }}">Decline</button></div>
 <form class="edit-form" id="edit-{{ item.escalation_id }}" data-id="{{ item.escalation_id }}" hidden>
-<label for="pack-{{ item.escalation_id }}">Edited action pack (JSON)</label>
-<textarea id="pack-{{ item.escalation_id }}" name="pack" rows="12" maxlength="12000">{{ item.action_pack.model_dump_json(indent=2) }}</textarea>
-<button type="submit">Record edited draft</button><p class="form-error" role="alert"></p></form>{% endif %}
+<h3>Review and edit draft</h3>
+<p>Change the proposed wording if needed. Your edits are recorded as a decision; they do not send notices or execute stock actions.</p>
+<label for="pull-{{ item.escalation_id }}">Stock-pull draft</label>
+<textarea id="pull-{{ item.escalation_id }}" name="pull" rows="4" maxlength="800" required>{{ item.action_pack.pull }}</textarea>
+<label for="staff-{{ item.escalation_id }}">Staff note</label>
+<textarea id="staff-{{ item.escalation_id }}" name="staff_note" rows="4" maxlength="800" required>{{ item.action_pack.staff_note }}</textarea>
+<label for="notice-{{ item.escalation_id }}">Customer notice — draft only</label>
+<p class="field-help">This remains a draft. It will not be sent.</p>
+<textarea id="notice-{{ item.escalation_id }}" name="customer_notice" rows="4" maxlength="800" required>{{ item.action_pack.customer_notice }}</textarea>
+<label for="sub-{{ item.escalation_id }}">Substitution</label>
+<p class="field-help">Substitution selection is not available in this demo.</p>
+<textarea id="sub-{{ item.escalation_id }}" name="substitution" rows="2" maxlength="800" readonly>{{ item.action_pack.substitution }}</textarea>
+<div class="toolbar">
+<button type="submit">Record edited draft</button>
+<button type="button" class="secondary" data-cancel-edit>Cancel</button>
+</div>
+<p class="form-error" role="alert"></p>
+</form>{% endif %}
 </article>{% endfor %}{% endblock %}
-

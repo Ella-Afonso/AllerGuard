@@ -81,7 +81,7 @@ The template uses:
 | Automatic retries | Zero at both the EventBridge target and Lambda asynchronous invocation boundaries |
 | CloudWatch log retention | 14 days |
 
-The interval above describes the current repository template. The timestamps in the recorded-result section describe the historical run evidence.
+The interval above describes the current repository template (`rate(15 minutes)`). The recorded invocations were **10 minutes apart** (22:00:27 UTC then 22:10:28 UTC). Those timestamps are historical evidence; they must not be rewritten to match the current 15-minute expression, and the 15-minute template must not be described as if it produced a 10-minute gap.
 
 The template expects four existing DynamoDB tables and a deployment ZIP in S3. It does not create those tables or the code bucket.
 

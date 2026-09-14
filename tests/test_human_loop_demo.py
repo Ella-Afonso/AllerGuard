@@ -25,5 +25,5 @@ def test_human_loop_demo_has_simulated_11_to_14_and_3_to_0_transitions(
     html = report.read_text(encoding="utf-8")
     assert html.count('<article class="event ') == 14
     assert "simulated" in html
-    assert "Owner choice recorded" in html
+    assert "Owner decision recorded" in html
     assert "No customer, stock or action-pack execution was performed." in html

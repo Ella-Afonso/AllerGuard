@@ -44,4 +44,4 @@ Before publishing, test in a browser with the `_headers` security policy applied
 
 If `.venv` refers to a Python installation that no longer exists, create a separate environment using an installed supported Python (3.12 or 3.13), then install the dependencies from `pyproject.toml` as described in the root README. Do not treat a launcher error as an application-test failure.
 
-The tracker review used `.local/tracker-venv` with Python 3.13.5 because the old `.venv` pointed to a missing Python 3.12 executable. The original environment was left intact. If pytest cannot access its temporary directory, choose a fresh writable `--basetemp` and cache directory; retain the original error when reporting results.
+A later audit found `.venv` healthy again on Python 3.12.10. `.local/tracker-venv` (Python 3.13.5) remains a fallback. If pytest cannot access its temporary directory, choose a fresh writable `--basetemp`; retain the original error when reporting results.

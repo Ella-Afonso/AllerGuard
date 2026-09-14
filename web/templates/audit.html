@@ -1,15 +1,15 @@
 {% extends "base.html" %}{% block content %}
 <div class="heading"><p class="eyebrow">EVERY DECISION HAS A RECORD</p><h1>The work you didn't have to do.</h1>
 <p>Silent assessments, drafts, notifications and owner choices in one history.</p></div>
-{% if session %}<div class="toolbar"><a class="button" href="/exports/csv">Download CSV</a><a class="button secondary" href="/exports/html">Download HTML evidence</a></div>{% endif %}
+{% if session %}<div class="toolbar audit-toolbar"><a class="button" href="/exports/csv">Download CSV</a><a class="button secondary" href="/exports/html">Download HTML evidence</a></div>{% endif %}
 <p class="muted">Events are historical records, not current pending totals. Repeated titles show separate linked events.</p>
 {% for row in rows %}<article class="card {% if row.event.value == 'match_decision' and row.decision.value == 'silent' %}silent-row{% endif %}">
-<div class="card-top"><span class="chip {{ row.tier.value if row.tier is defined and row.tier else 'UNASSESSED' }}">{{ row.event.value|replace('_',' ') }}</span><time>{{ row.timestamp.isoformat() }}</time></div>
-<h2>{{ row.alert_title if row.alert_title is defined else 'Daily diary · ' ~ row.entry_date }}</h2>
+<div class="card-top"><span class="chip {{ row.tier.value if row.tier is defined and row.tier else 'UNASSESSED' }}">{{ row.event|event_label }}</span><time>{{ row.timestamp|display_time }}</time></div>
+<h2>{{ row.alert_title if row.alert_title is defined else 'Daily diary · ' ~ (row.entry_date|display_date) }}</h2>
 {% if row.reason is defined %}<p>{{ row.reason }}</p>{% endif %}
 {% if row.tier is defined and row.tier %}<p>Tier: {{ row.tier.value }} · Gate: {{ row.decision.value }}</p>{% endif %}
-{% if row.owner_decision is defined and row.owner_decision %}<p><b>Owner choice: {{ row.owner_decision.decision.value }}</b></p>{% endif %}
+{% if row.owner_decision is defined and row.owner_decision %}<p><b>Owner choice: {{ row.owner_decision.decision|owner_choice }}</b></p>{% endif %}
 {% if row.notification is defined and row.notification %}<p>Notification: {{ row.notification.outcome.value }} · {{ row.notification.provider.value }} · {{ row.notification.mode.value }}. Provider acceptance does not prove inbox receipt.</p>{% endif %}
-<details><summary>Inspect stored evidence</summary><pre>{{ row.model_dump_json(indent=2) }}</pre></details>
+{% include "_evidence.html" %}
 </article>{% else %}<section class="empty"><h2>No evidence recorded in this session.</h2><p>Run the replay from the Inbox.</p></section>{% endfor %}
 {% endblock %}

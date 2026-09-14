@@ -8,9 +8,12 @@ Built for the **Agents for Humans** hackathon using AWS Strands Agents and Amazo
 
 ## Public demo
 
-**[Try AllerGuard](https://allerguard-7se.pages.dev)** · **[View the source code](https://github.com/Ella-Afonso/AllerGuard)**
+**[Try AllerGuard](https://allerguard-7se.pages.dev)**
 
-No account or installation is required.
+No account or installation is required. The GitHub origin listed below was still
+returning HTTP 404 when fetched logged-out on 14 September 2026 (the repository
+is currently private). Do not treat clone instructions as public-judge access
+until that URL opens without signing in.
 
 1. Select **Start fresh demo**, then **Run replay demo**.
 2. See five historical recalls assessed: **two handled silently and three sent for review**.
@@ -75,12 +78,12 @@ These are recorded results, with each environment's scope kept explicit.
 
 | Evidence | Result |
 |---|---|
-| Offline Python suite, 13 September 2026 | **419 passed**, 6 live Bedrock tests deselected, 3 third-party warnings. Ruff and MyPy also passed. |
+| Offline Python suite, 14 September 2026 | **434 passed**, 6 live Bedrock tests deselected, 3 third-party warnings. Ruff, format, MyPy (61 files) and `git diff --check` also passed. Node Pages tests: 5 passed. |
 | Local owner workflow | Five assessments, two silent outcomes, three escalations; approve/edit/decline and replay tested with Moto storage. |
 | Diary and export | 15 events before diary confirmation, 16 after confirmation; replay leaves the stored count unchanged. |
 | Separate live Bedrock checks | Five labelled matcher fixtures and a separate action-drafter case passed. |
 | Scheduled AWS cycle, 13 September 2026 | First unattended run processed five recalls and committed progress. The next run found zero new alerts. |
-| AWS stored evidence | Eight audit events, three queued escalations, and six ledger items including the progress marker. |
+| AWS stored evidence | Eight audit events, three queued escalations, six ledger items including the progress marker, and one business row. |
 
 The AWS cycle ran in `eu-west-2`; its EventBridge rule was disabled after the proof. It used real Lambda and DynamoDB, saved recall fixtures, fixed proposals, and no notifications. It did not test live Bedrock inside that scheduled cycle.
 
@@ -88,7 +91,7 @@ See the [scheduled-cycle guide](infra/cycle/README.md) and [audit storage guide]
 
 ## Run locally
 
-Use **Python 3.12** and Git. The following commands are for Windows PowerShell. AWS credentials are not needed for the local demo.
+Use **Python 3.12 or 3.13** (`requires-python` is `>=3.12,<3.14`) and Git. The following commands are for Windows PowerShell. AWS credentials are not needed for the local demo. This audit used the repository `.venv` on Python 3.12.10.
 
 ```powershell
 git clone https://github.com/Ella-Afonso/AllerGuard.git
@@ -130,7 +133,7 @@ Reports and traces are written to `artifacts/`. The diary command also creates a
 git diff --check
 ```
 
-The test command excludes paid live Bedrock tests. The 13 September result above is the historical AWS-proof baseline. The 14 September tracker review passed **434 offline tests** (6 live cases deselected), Ruff and MyPy in a fresh Python 3.13.5 environment. The separate public-demo regressions passed **5 Node tests** (`node --test tests/pages_demo.test.cjs`). These are recorded results, not a live CI badge.
+The test command explicitly excludes paid live Bedrock tests. The recorded 434-test result above is a dated baseline, not a live CI status badge.
 
 ## Technology and repository
 
@@ -148,8 +151,6 @@ The test command excludes paid live Bedrock tests. The 13 September result above
 | `scripts/` | Local demos and setup utilities |
 | `infra/` | AWS templates and operator guides |
 
-See the [detailed architecture](docs/architecture.md), [recording guide](docs/demo-guide.md), and [optional operations and public-demo tests](docs/operations.md).
-
 ## Current limitations
 
 Live SES/SNS delivery and inbox receipt remain unverified. The complete product has not been deployed to AgentCore; the earlier AgentCore hello-agent proof was a separate, smaller deployment. Live FSA polling in the scheduled cycle and live supervisor delegation remain outside the recorded proof.
@@ -161,7 +162,3 @@ Menu extraction, automatic stock actions, and customer-message execution are not
 The demo café and its inventory are fictional. Historical recall fixtures use public information from the **UK Food Standards Agency** and contain public sector information licensed under the [Open Government Licence v3.0](https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/).
 
 The project code is available under the **MIT Licence**. See [LICENSE](LICENSE).
-
-## AI assistance
-
-Cursor, Claude Code, and OpenAI Codex assisted with planning, implementation, testing, troubleshooting, and documentation. The project uses the open-source libraries listed in `pyproject.toml`; Moto supplies the disclosed offline AWS emulation. AI-assisted changes were checked through code review and automated tests, with live results distinguished from simulations above.

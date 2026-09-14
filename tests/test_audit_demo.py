@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from html import escape
 from pathlib import Path
 
 import pytest
@@ -49,7 +50,11 @@ def test_full_scenario_persisted_counts(
     assert html.count('<article class="event ') == 8
     assert "Distinct assessments" in html
     for row in rows:
-        assert row.entry_id in html
+        assert escape(row.alert_title) in html
+        assert escape(row.alert_id) in html
+        assert row.entry_id not in html
+    assert "Technical evidence" not in html
+    assert "Technical record" not in html
 
 
 def test_full_scenario_replay_preserves_stored_rows_without_duplicates(
