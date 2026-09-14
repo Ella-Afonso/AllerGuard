@@ -48,3 +48,6 @@ Thumbs.db
 /infra/agentcore/*.zip
 /infra/lambda/package/
 /infra/lambda/*.zip
+
+/screenshots
+/evidence

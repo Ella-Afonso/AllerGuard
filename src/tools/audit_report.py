@@ -7,7 +7,7 @@ from html import escape
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from src.domain.diary import DiaryEvent, DiaryRecord, DiaryView
+from src.domain.diary import DiaryEvent, DiaryRecord, DiaryView, RecallDiaryLink
 from src.domain.models import AuditEntry, AuditEvent, GateDecision, NotificationMode
 from src.domain.presentation import (
     assessment_result_label,
@@ -16,7 +16,7 @@ from src.domain.presentation import (
     format_display_date,
     format_display_time,
     gate_result_label,
-    owner_choice_label,
+    owner_outcome_label,
 )
 
 # Official FSA hostnames only — hostname equality after urlsplit, not substring checks.
@@ -65,11 +65,47 @@ def _event_label(entry: AuditEntry) -> str:
             return "Notification recorded · simulated, no message sent"
         return "Notification recorded · inbox receipt unverified"
     if entry.event is AuditEvent.DECISION_RECORDED and entry.owner_decision is not None:
-        return f"{event_display_label(entry.event)} · {entry.owner_decision.decision.value}"
+        outcome = owner_outcome_label(entry.owner_decision.decision)
+        return f"{event_display_label(entry.event)} · {outcome}"
     return event_display_label(entry.event)
 
 
-def _diary_section(views: list[DiaryView], records: list[DiaryRecord]) -> str:
+def _recall_link_card(
+    link: RecallDiaryLink, *, additional: set[str], anchors: dict[str, str]
+) -> str:
+    filed = link.event_id in additional
+    origin = "linked after filing" if filed else "filed with the original diary"
+    pending = link.state == "pending"
+    status = "Awaiting owner review" if pending else "Decision record filed"
+    choice = owner_outcome_label(link.state)
+    tone = "silent" if pending else "escalate"
+    anchor = anchors.get(link.event_id, "")
+    view = (
+        f'<p><a href="#{escape(anchor, quote=True)}">View decision evidence</a></p>'
+        if anchor
+        else ""
+    )
+    return (
+        f'<article class="event {tone}">'
+        f'<span class="badge">{escape(status)}</span>'
+        f"<h3>{escape(link.alert_title)}</h3>"
+        "<dl>"
+        f"<dt>Recall title</dt><dd>{escape(link.alert_title)}</dd>"
+        f"<dt>Owner choice</dt><dd>{escape(choice)}</dd>"
+        f"<dt>Recorded time</dt><dd>{escape(format_display_time(link.evidence_at))}</dd>"
+        f"<dt>Status</dt><dd>{escape(status)}</dd>"
+        "</dl>"
+        f'<p class="caption">{escape(origin)}.</p>{view}'
+        "</article>"
+    )
+
+
+def _diary_section(
+    views: list[DiaryView],
+    records: list[DiaryRecord],
+    *,
+    anchors: dict[str, str],
+) -> str:
     if not records:
         return ""
     parts = ['<section class="events" aria-label="Daily diary"><h2>Daily diary</h2>']
@@ -88,27 +124,23 @@ def _diary_section(views: list[DiaryView], records: list[DiaryRecord]) -> str:
             '<article class="event">'
             f'<span class="badge">Daily record · '
             f"{escape(format_display_date(diary.entry_date))}</span>"
-            f"<h2>{escape(diary.business_id)}</h2>"
+            "<h2>Today's food-safety record</h2>"
             "<p>Recall decisions linked automatically from stored evidence.</p>"
             "<p>Original filing: opening unconfirmed; closing unconfirmed.</p>"
-            f'<p class="caption">Filed {escape(format_display_time(diary.filed_at))}; '
-            f"evidence cutoff {escape(format_display_time(diary.evidence_cutoff))}; "
-            f"business timezone {escape(diary.business_timezone)}.</p>"
+            f'<p class="caption">Filed {escape(format_display_time(diary.filed_at))}. '
+            f"Evidence cutoff {escape(format_display_time(diary.evidence_cutoff))}. "
+            "Business timezone Europe/London.</p>"
         )
         if diary.summary_source.value == "model":
             parts.append(
                 '<p class="caption">Optional model wording, unverified narrative; '
                 "the structured evidence below is authoritative.</p>"
             )
-        parts.append(
-            f'<p>{escape(diary.summary)}</p><p class="caption">Summary source: '
-            f"{escape(diary.summary_source.value)} / "
-            f"{escape(diary.summary_model_id)}</p>"
-        )
+        parts.append(f"<p>{escape(diary.summary)}</p>")
         if view.confirmation is not None and view.confirmation.confirmation is not None:
             answers = view.confirmation.confirmation
             parts.append(
-                f"<p><b>Owner confirmation ({escape(answers.mode)})</b>: opening "
+                f"<p><b>Owner confirmation</b>: opening "
                 f"{escape(answers.opening_status.value)}; closing "
                 f"{escape(answers.closing_status.value)}.</p>"
                 f"<p>Note: {escape(answers.note or 'None')}</p>"
@@ -117,28 +149,19 @@ def _diary_section(views: list[DiaryView], records: list[DiaryRecord]) -> str:
             )
         else:
             parts.append("<p><b>Awaiting owner confirmation</b>: opening and closing.</p>")
-        parts.append("<details><summary>Original filed recall links and exceptions</summary><ul>")
-        for link in diary.recall_actions:
-            parts.append(f"<li>{escape(link.alert_title)} — {escape(link.state)}</li>")
-        parts.append("</ul><p>" + escape("; ".join(diary.exceptions)) + "</p></details>")
+        parts.append(f"<p>{escape('; '.join(diary.exceptions))}</p>")
         additional = {link.event_id for link in view.additional_links}
         parts.append(
-            f"<h3>Recall evidence as of {escape(format_display_time(view.as_of))}</h3><ul>"
+            f"<h3>Linked recall decisions as of "
+            f"{escape(format_display_time(view.as_of))}</h3>"
+            '<div class="link-grid">'
         )
         for link in view.current_recall_actions:
-            origin = " · linked after filing" if link.event_id in additional else " · filed link"
-            choice = (
-                "awaiting owner review"
-                if link.state == "pending"
-                else f"owner choice: {link.state}"
-            )
-            parts.append(
-                f"<li>{escape(link.alert_title)} — {escape(choice)} "
-                f"at {escape(format_display_time(link.evidence_at))}{origin}.</li>"
-            )
+            parts.append(_recall_link_card(link, additional=additional, anchors=anchors))
         parts.append(
-            '</ul><p class="caption">Choices record approval, editing or decline. '
+            '</div><p class="caption">Choices record approval, editing or decline. '
             "They do not prove customer or stock actions were executed. "
+            "No customer notice or stock action was executed. "
             "Detailed append-only evidence is retained by the application.</p></article>"
         )
     parts.append("</section>")
@@ -159,7 +182,14 @@ def write_audit_report(
     This function does not read DynamoDB, call the matcher, or mutate stored data.
     """
     summary = summarize_audit_entries(entries)
+    anchors: dict[str, str] = {}
+    decision_n = 0
+    for entry in entries:
+        if entry.event is AuditEvent.DECISION_RECORDED:
+            decision_n += 1
+            anchors[entry.entry_id] = f"decision-{decision_n}"
     cards: list[str] = []
+    decision_n = 0
     for index, entry in enumerate(entries, 1):
         is_error = entry.event is AuditEvent.MATCH_ERROR
         if is_error:
@@ -188,7 +218,7 @@ def write_audit_report(
             record = entry.owner_decision
             original = record.original_action_pack
             extra += (
-                f"<p><b>Owner choice: {escape(owner_choice_label(record.decision))}</b> "
+                f"<p><b>Owner choice: {escape(owner_outcome_label(record.decision))}</b> "
                 f"at {escape(format_display_time(record.decided_at))}. "
                 "This records an owner choice. It does not execute stock or customer actions.</p>"
             )
@@ -210,8 +240,12 @@ def write_audit_report(
                     f"<dd>{escape(edited.customer_notice)}</dd>"
                     f"<dt>Substitution</dt><dd>{escape(edited.substitution)}</dd></dl>"
                 )
+        identity = ""
+        if entry.event is AuditEvent.DECISION_RECORDED:
+            decision_n += 1
+            identity = f' id="decision-{decision_n}"'
         cards.append(f"""
-        <article class="event {state}">
+        <article class="event {state}"{identity}>
           <div class="event-top"><span class="number">{index:02d}</span>
             <span class="badge">{escape(_event_label(entry))}</span>
             <time>{escape(format_display_time(entry.timestamp))}</time></div>
@@ -258,41 +292,53 @@ def write_audit_report(
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
 <title>AllerGuard · Decision evidence</title>
 <style>
-:root{color-scheme:light;font-family:"Segoe UI",system-ui,sans-serif;
-color:#1b2430;background:#f4f1ea}
-*{box-sizing:border-box}body{margin:0}main{max-width:1100px;margin:0 auto;padding:48px 28px 70px}
-.brand{letter-spacing:.12em;font-size:13px;font-weight:800;color:#243a8a;text-transform:uppercase}
+:root{--color-bg:#f4f1ea;--color-surface:#fffcf7;--color-ink:#1b2430;
+--color-ink-soft:#5c6573;--color-line:#d9d2c6;--color-primary:#2f4cb0;
+--color-primary-ink:#243a8a;--color-primary-soft:#e8edf8;--color-silent:#5d6a7a;
+--color-possible:#b56a12;color-scheme:light;
+font-family:"Segoe UI",system-ui,-apple-system,sans-serif;color:var(--color-ink);
+background:var(--color-bg)}
+*{box-sizing:border-box}body{margin:0;background:var(--color-bg);color:var(--color-ink)}
+main{max-width:1100px;margin:0 auto;padding:48px 28px 70px}
+.brand{letter-spacing:.12em;font-size:13px;font-weight:800;color:var(--color-primary-ink);
+text-transform:uppercase}
 header{margin:35px 0 28px;display:grid;grid-template-columns:1fr 270px;gap:30px;align-items:end}
-h1{font-family:Palatino,Georgia,serif;font-size:clamp(32px,5vw,52px);letter-spacing:-.04em;
-line-height:1.08;margin:12px 0 20px}
-.intro{font-size:17px;line-height:1.6;max-width:650px;color:#5c6573}
-.scope{border-left:3px solid #2f4cb0;padding:3px 0 3px 20px;line-height:1.6;font-size:13px;
-color:#5c6573}
+h1{font-family:Palatino,"Palatino Linotype",Georgia,serif;font-size:clamp(32px,5vw,52px);
+letter-spacing:-.04em;line-height:1.08;margin:12px 0 20px}
+h3{font-family:Palatino,Georgia,serif;font-size:1.05rem;margin:20px 0 8px}
+.intro{font-size:17px;line-height:1.6;max-width:650px;color:var(--color-ink-soft)}
+.scope{border-left:3px solid var(--color-primary);padding:3px 0 3px 20px;line-height:1.6;
+font-size:13px;color:var(--color-ink-soft)}
 .stats{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin:30px 0}
-.stat{padding:23px;background:#fffcf7;border:1px solid #d9d2c6;border-radius:12px;
-box-shadow:0 1px 2px rgba(27,36,48,.06)}
-.stat b{font-size:37px;display:block;letter-spacing:-.04em;color:#1b2430}
-.stat span{font-size:13px;color:#5c6573}
-.caption{font-size:13px;color:#5c6573;line-height:1.6}.events{display:grid;gap:18px;margin-top:20px}
-.event{background:#fffcf7;border:1px solid #d9d2c6;border-left:5px solid #5d6a7a;border-radius:12px;
-padding:25px 28px}.event.escalate{border-left-color:#b56a12}.event.error{border-left-color:#8b3a4a}
-.event-top{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.number{font-size:12px;color:#5c6573}
-.badge{font-size:12px;font-weight:700;background:#e8edf8;color:#243a8a;
-padding:7px 11px;border-radius:20px}
-.escalate .badge{background:#f6ead7;color:#7a480c}.error .badge{background:#f3dde2;color:#8b3a4a}
-time{margin-left:auto;color:#5c6573;font-size:12px}
+.stat{padding:23px;background:var(--color-surface);border:1px solid var(--color-line);
+border-radius:12px;box-shadow:0 1px 2px rgba(27,36,48,.06)}
+.stat b{font-size:37px;display:block;letter-spacing:-.04em;color:var(--color-ink)}
+.stat span{font-size:13px;color:var(--color-ink-soft)}
+.caption{font-size:13px;color:var(--color-ink-soft);line-height:1.6}
+.events,.link-grid{display:grid;gap:18px;margin-top:20px}
+.event{background:var(--color-surface);border:1px solid var(--color-line);
+border-left:5px solid var(--color-silent);border-radius:12px;padding:25px 28px}
+.event.escalate{border-left-color:var(--color-possible)}
+.event.error{border-left-color:#8b3a4a}
+.event-top{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.number{font-size:12px;color:var(--color-ink-soft)}
+.badge{font-size:12px;font-weight:700;background:var(--color-primary-soft);
+color:var(--color-primary-ink);padding:7px 11px;border-radius:20px}
+.escalate .badge{background:#f6ead7;color:#7a480c}
+.error .badge{background:#f3dde2;color:#8b3a4a}
+time{margin-left:auto;color:var(--color-ink-soft);font-size:12px}
 h2{font-size:21px;line-height:1.35;margin:20px 0 12px}
 .reason{font-size:16px;line-height:1.7;max-width:900px}
-.source{margin-top:20px;font-size:13px}a{color:#243a8a;text-underline-offset:4px}
-details{margin-top:22px;border-top:1px solid #d9d2c6;padding-top:15px;font-size:12px}
-summary{cursor:pointer;color:#1b2430}dl{display:grid;grid-template-columns:140px 1fr;gap:10px}
-dt{color:#5c6573;font-weight:600}dd{margin:0;overflow-wrap:anywhere}footer{margin-top:32px;font-size:12px;
-line-height:1.7;color:#5c6573}
-.storage{font-size:12px;background:#e8edf8;color:#243a8a;padding:9px 13px;
-display:inline-block;border-radius:6px}
+.source{margin-top:20px;font-size:13px}a{color:var(--color-primary-ink);text-underline-offset:4px}
+dl{display:grid;grid-template-columns:11rem 1fr;gap:10px 12px;margin:16px 0}
+dt{color:var(--color-ink-soft);font-weight:600}dd{margin:0;overflow-wrap:anywhere}
+footer{margin-top:32px;font-size:12px;line-height:1.7;color:var(--color-ink-soft);
+border-top:1px solid var(--color-line);padding-top:20px}
+.storage{font-size:12px;background:var(--color-primary-soft);color:var(--color-primary-ink);
+padding:9px 13px;display:inline-block;border-radius:6px}
 @media(max-width:900px){.stats{grid-template-columns:repeat(2,1fr)}}
-@media(max-width:650px){main{padding:26px 18px}header{grid-template-columns:1fr}.event{padding:20px}
-time{margin-left:0}dl{grid-template-columns:1fr}}
+@media(max-width:650px){main{padding:26px 18px}header{grid-template-columns:1fr}
+.event{padding:20px}time{margin-left:0}dl{grid-template-columns:1fr}}
 </style></head><body><main><div class="brand">ALLERGUARD / DECISION EVIDENCE</div>
 <header><div><h1>Quiet when it can be.<br>Clear when it matters.</h1>
 <p class="intro">A read-only view of stored audit events: completed match decisions,
@@ -325,7 +371,7 @@ Matching → code gate → drafted/fallback action pack → pending queue → au
         "This download is not tamper-proof storage and is not a legal or "
         "compliance certificate.</p>"
     )
-    document += _diary_section(diary_views or [], diary_records or [])
+    document += _diary_section(diary_views or [], diary_records or [], anchors=anchors)
     document += '<section class="events">' + "".join(cards) + "</section>"
     document += f"""<footer>Generated from stored evidence supplied by the caller after
     reading the audit store. This report is evidence presentation only — not a second

@@ -32,6 +32,7 @@ from src.domain.presentation import (
     format_display_time,
     gate_result_label,
     owner_choice_label,
+    owner_outcome_label,
     short_evidence_reference,
 )
 from src.runtime.daily_diary import run_daily_diary
@@ -44,6 +45,25 @@ from tests.test_diary import decision_entry
 
 ISO_STAMP = re.compile(r"\d{4}-\d{2}-\d{2}T")
 HASH_ID = re.compile(r"[0-9a-f]{64}")
+GREEN_EXPORT = (
+    "#216e59",
+    "#f3f5ee",
+    "#183c34",
+    "#709b86",
+    "#eaf3eb",
+    "#45655b",
+    "#28a745",
+)
+MACHINE_MARKERS = (
+    "Technical evidence",
+    "Technical record",
+    "Filed at (raw)",
+    "As of (raw)",
+    "(raw)",
+    "#decision_recorded",
+    "Evidence reference",
+    "payload_json",
+)
 
 
 class _VisibleText(HTMLParser):
@@ -108,6 +128,8 @@ def test_event_labels_are_plain_english() -> None:
         == "Conservative fallback draft"
     )
     assert owner_choice_label(OwnerDecision.EDIT) == "Edit"
+    assert owner_outcome_label(OwnerDecision.APPROVE) == "Approved"
+    assert owner_outcome_label("decline") == "Declined"
 
 
 def test_csv_and_html_are_readable_without_machine_payloads(
@@ -149,19 +171,22 @@ def test_csv_and_html_are_readable_without_machine_payloads(
     visible = visible_text(html)
     assert "10 Sep 2026, 13:00 BST" in visible
     assert "Owner decision recorded" in visible
-    assert "Technical evidence" not in html
-    assert "Technical record" not in html
+    assert "Approved" in html
+    assert "<pre" not in html
+    assert ISO_STAMP.search(html) is None
+    assert HASH_ID.search(html) is None
+    for marker in MACHINE_MARKERS:
+        assert marker not in html
     assert entry.entry_id not in html
     assert entry.timestamp.isoformat() not in html
     assert "append-only" in html.casefold()
     assert "tamper-proof" in html.casefold()
     assert "compliance certificate" in html.casefold()
-    assert ISO_STAMP.search(visible) is None
-    assert HASH_ID.search(html) is None
     assert "#f4f1ea" in html
     assert "#2f4cb0" in html
-    assert "#216e59" not in html
-    assert "#f3f5ee" not in html
+    assert "#fffcf7" in html
+    for token in GREEN_EXPORT:
+        assert token not in html.casefold()
 
 
 @pytest.fixture
@@ -224,11 +249,29 @@ def test_dashboard_cards_hide_iso_and_full_ids(client: TestClient) -> None:
     assert "raw_timestamp" not in rows[0]
     assert HASH_ID.search(csv_text) is None
     html_export = client.get("/exports/html").text
-    assert "Technical evidence" not in html_export
-    assert "append-only" in html_export.casefold()
-    assert ISO_STAMP.search(visible_text(html_export)) is None
+    assert "Recall audit events" in html_export
+    assert html_export.count("<b>14</b>") >= 1
+    assert "Distinct assessments" in html_export
+    assert "Silent decision events" in html_export
+    assert "Requires-review decision events" in html_export
+    assert "Assessment error events" in html_export
+    assert "Decision record filed" in html_export
+    assert "Approved" in html_export
+    assert "Edited" in html_export
+    assert "Declined" in html_export
+    assert "View decision evidence" in html_export
+    assert "No customer notice or stock action was executed" in html_export
+    assert ISO_STAMP.search(html_export) is None
     assert HASH_ID.search(html_export) is None
+    assert "<pre" not in html_export
+    for marker in MACHINE_MARKERS:
+        assert marker not in html_export
+    assert "#f4f1ea" in html_export
+    assert "#2f4cb0" in html_export
+    for token in GREEN_EXPORT:
+        assert token not in html_export.casefold()
     assert links[0]["event_id"] not in html_export
+    assert "#decision_recorded" not in html_export
 
 
 def test_audit_inspector_is_readable_without_json_payload(client: TestClient) -> None:

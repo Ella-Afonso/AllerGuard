@@ -55,6 +55,9 @@ def test_full_scenario_persisted_counts(
         assert row.entry_id not in html
     assert "Technical evidence" not in html
     assert "Technical record" not in html
+    assert "#decision_recorded" not in html
+    assert "Filed at (raw)" not in html
+    assert "<pre" not in html
 
 
 def test_full_scenario_replay_preserves_stored_rows_without_duplicates(

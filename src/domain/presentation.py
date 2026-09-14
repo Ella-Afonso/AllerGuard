@@ -106,3 +106,14 @@ def assessment_source_label(mode: AssessmentMode, draft_source: DraftSource | No
 def owner_choice_label(choice: OwnerDecision | str) -> str:
     key = choice.value if isinstance(choice, OwnerDecision) else choice
     return {"approve": "Approve", "edit": "Edit", "decline": "Decline"}.get(key, key)
+
+
+def owner_outcome_label(choice: OwnerDecision | str) -> str:
+    """Past-tense owner outcome for recorded evidence, not inbox buttons."""
+    key = choice.value if isinstance(choice, OwnerDecision) else choice
+    return {
+        "pending": "Awaiting owner review",
+        "approve": "Approved",
+        "edit": "Edited",
+        "decline": "Declined",
+    }.get(key, key)

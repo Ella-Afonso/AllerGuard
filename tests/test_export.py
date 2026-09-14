@@ -48,6 +48,10 @@ def test_complete_export_escaping_and_no_writes(audit_settings: Settings, tmp_pa
     html = result.html_path.read_text(encoding="utf-8")
     assert "Daily diary" in html and "&lt;script&gt;" in html and "<script>" not in html
     assert "Technical evidence" not in html
+    assert "Filed at (raw)" not in html
+    assert "As of (raw)" not in html
+    assert "#decision_recorded" not in html
+    assert "<pre" not in html
     assert "payload_json" not in html
     assert "display_time" in confirmation
     assert "raw_timestamp" not in confirmation
