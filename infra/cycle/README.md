@@ -1,75 +1,173 @@
-# Scheduled infrastructure proof
+# AllerGuard · Scheduled AWS Cycle
 
-Stack `allerguard-cycle-proof-v2` deployed successfully on 2026-09-13 21:41 UTC
-in eu-west-2. Initial deployment failed due to missing `dynamodb:Scan` permission
-in the IAM role policy. The template was corrected to include Scan alongside
-GetItem and Query. Stack was updated at 21:59 UTC. The Lambda concurrency quota
-was successfully increased to 1000, allowing `ReservedConcurrentExecutions: 1`.
+This directory contains the infrastructure for running AllerGuard's monitoring cycle automatically on AWS. It demonstrates that a scheduled invocation can assess recalls, record outcomes, and remember which alert versions have already been processed.
 
-First scheduled EventBridge invocation at 22:00:27 UTC processed five replay
-alerts: two silent (FSA-PRIN-43-2026, FSA-PRIN-39-2026) and three escalated
-(FSA-AA-55-2020, FSA-AA-42-2026, FSA-AA-38-2026). Status: COMMITTED. Watermark
-advanced to 2026-09-04T18:39:45.509Z. Second scheduled invocation at 22:10:28 UTC
-reported EMPTY with zero alerts and unchanged watermark. EventBridge rule
-disabled after proof completion. Notifications remained disabled throughout.
+**[Project overview](../../README.md)** · **[Public demo](https://allerguard-7se.pages.dev)**
 
-Four tables with prefix `allerguard-cycle-proof-20260913` contain the proof
-evidence: business (1 item), ledger (6 items including watermark), audit (8
-events), queue (3 escalations). The package was uploaded under
-`allerguard-cycle-proof/20260913/cycle.zip` in the existing AgentCore deployment
-bucket. The pre-existing hello runtime/invoker was untouched.
+The public demo runs independently in the browser. It does not invoke this AWS deployment.
 
-This wraps the existing cycle, uses dedicated synthetic-business tables, and
-performs no external notifications or owner decisions.
+## Recorded result
 
-The CloudFormation template starts with its EventBridge rule disabled. Keep the
-existing AgentCore hello runtime and invoker untouched. Provision four dedicated
-tables with the existing inventory, alert-ledger, audit, and escalation tools;
-seed `demo-cafe` before enabling this rule. Never share its ledger with another
-business or a browser demo.
+The isolated proof completed on **13 September 2026** in **Europe (London), `eu-west-2`**, using stack `allerguard-cycle-proof-v2`.
 
-Build a Python 3.12 Linux x86_64 ZIP containing `src/`, dependencies from
-`requirements-linux.lock`, and `fixtures/cycle.json` generated using
-`src.tools.surface_files.write_replay_feed`. Use Linux wheels, not the Windows
-virtual environment. Windows pip environment markers selected pywin32 even with
-`--platform`; the lock resolves the installed dependency graph for Linux and
-is installed with `--no-deps`. Reproduction from the repository root:
+| Run | Recorded outcome |
+|---|---|
+| First scheduled run, 22:00:27 UTC | `committed`: five alerts assessed, two handled silently, three escalated. |
+| Next recorded scheduled run, 22:10:28 UTC | `empty`: zero new alerts and unchanged progress marker. |
 
-```powershell
-.\.venv\Scripts\python.exe -m pip install --no-deps --platform manylinux2014_x86_64 --implementation cp --python-version 3.12 --only-binary=:all: --target artifacts/cycle-package -r infra/cycle/requirements-linux.lock
-.\.venv\Scripts\python.exe -m scripts.prepare_cycle_proof package --folder artifacts/cycle-package --archive artifacts/cycle-proof.zip
+After the proof, the stored evidence was:
+
+| Table | Items |
+|---|---:|
+| Business | 1 fictional café |
+| Ledger | 6: five processed alert versions and one progress marker |
+| Audit | 8 events |
+| Escalation queue | 3 pending escalations |
+
+The recorded progress marker, also called a watermark, was `2026-09-04T18:39:45.509Z`. The tables use the prefix `allerguard-cycle-proof-20260913`.
+
+**The EventBridge rule was disabled after the proof.** These are recorded results, not a claim that the system is currently monitoring.
+
+## What this proves
+
+- EventBridge triggered Lambda without a manual invocation.
+- The existing Python runtime processed five saved FSA alerts.
+- Real DynamoDB tables stored the assessments, queue entries, and progress.
+- The next poll recognised that those alert versions had already been processed.
+
+Assessment and action-draft proposals were fixed inputs. Notifications were disabled. This proof did not exercise live Bedrock, live FSA polling, owner decisions, diary filing, SES/SNS delivery, or stock/customer actions.
+
+Separate evidence for other parts of the project is described in the [root README](../../README.md).
+
+## Architecture
+
+```mermaid
+flowchart LR
+    A[EventBridge rule] --> B[Lambda handler]
+    B --> C[Existing monitoring runtime]
+    D[Saved FSA fixtures] --> C
+    E[Business inventory] --> C
+    C --> F[Assess and apply safety gate]
+    F --> G[Audit and escalation queue]
+    G --> H[Commit processed versions and watermark]
 ```
 
-Use a fresh package folder when changing dependency versions. Docker was not
-available for local Linux import verification; Lambda import verification remains
-open because function creation failed first. Upload the reviewed ZIP to a private S3 code
-bucket and supply its bucket/key plus the four dedicated table names to the
-template. IAM changes must be reviewed before deploying with CAPABILITY_IAM.
+The Lambda handler calls `run_monitoring_cycle`. It accepts only completed or empty outcomes as success; incomplete processing raises an error. It reads configuration from its environment rather than trusting table names or model settings supplied in an invocation event.
 
-Resume by resolving the account quota through AWS, then deploy a new stack name
-(a ROLLBACK_COMPLETE stack cannot be updated). Reuse the untouched proof ledger
-only after checking that it remains empty. Never label a manually invoked run as
-unattended. Capture a scheduled first run before claiming this proof passed.
+## Files
 
-The default is explicitly injected proposals, real infrastructure/storage. For
-Bedrock, add an independently reviewed policy scoped to the configured EU
-inference profile and its destination foundation-model ARNs before selecting
-`bedrock`; the default role deliberately has no model permission. No SES/SNS
-permission is granted. The handler rejects enabled notifications.
+| File | Purpose |
+|---|---|
+| [template.yaml](template.yaml) | Lambda, IAM role, CloudWatch log group, EventBridge rule, and invocation permissions. |
+| [requirements-linux.lock](requirements-linux.lock) | Dependency list for the Python 3.12 Linux package. |
+| [prepare_cycle_proof.py](../../scripts/prepare_cycle_proof.py) | Commands for provisioning dedicated tables and packaging code. |
+| [cycle_proof.py](../../src/tools/cycle_proof.py) | Provisioning and packaging implementation. |
+| [scheduled_cycle.py](../../src/runtime/scheduled_cycle.py) | Lambda entry point. |
+| [test_scheduled_cycle.py](../../tests/test_scheduled_cycle.py) | Offline checks for the scheduled entry point. |
 
-Before enabling the schedule, validate the template in AWS and confirm the
-function imports, table schemas, seed and bundled fixtures. Do not consume the
-fresh proof ledger with a manual successful cycle. Enable the rule and wait for
-its first unattended invocation; capture the EventBridge/Lambda timestamp,
-structured `scheduled_cycle` log and persisted audit/queue/watermark read-back.
-The next invocation must report `empty`. Disable the rule after capturing proof.
+## Deployment settings
 
-Reserved concurrency is one and both retry policies are zero. A blocked or
-uncertain commit raises an error. These settings do not provide exactly-once
-delivery or an atomic ledger. Inspect failures before rerunning. Five replay
-alerts should produce two silent and three escalated assessments; with
-notifications disabled the initial history has eight events, not eleven.
+The template uses:
 
-The read-only evidence server can point to these tables using the same environment
-configuration: `python -m scripts.serve_dashboard --mode aws-evidence`.
-It binds to loopback and rejects all POSTs. It never starts Moto.
+| Setting | Value |
+|---|---|
+| Runtime | Python 3.12, Linux x86_64 |
+| Memory / timeout | 1,024 MB / 300 seconds |
+| Reserved concurrency | 1 |
+| Schedule | Every 15 minutes; disabled by default |
+| Proposal mode | `injected` by default |
+| FSA source | Bundled `fixtures/cycle.json` |
+| Notifications | Disabled; the handler rejects enabled notifications |
+| Automatic retries | Zero at both the EventBridge target and Lambda asynchronous invocation boundaries |
+| CloudWatch log retention | 14 days |
+
+The interval above describes the current repository template. The timestamps in the recorded-result section describe the historical run evidence.
+
+The template expects four existing DynamoDB tables and a deployment ZIP in S3. It does not create those tables or the code bucket.
+
+## Prepare a new proof
+
+Use this procedure only when another AWS verification is needed. Viewing the public demo does not require deploying these resources.
+
+Run local commands from the repository root with Python 3.12 dependencies installed as described in the [setup guide](../../README.md#run-locally). AWS provisioning requires an authenticated profile with appropriate permissions and can incur charges.
+
+### 1. Create isolated tables
+
+Choose a new prefix beginning with `allerguard-cycle-proof-`. Do not reuse the completed proof's ledger for a new first-run demonstration.
+
+For example:
+
+```powershell
+$env:AWS_PROFILE = "allerguard-dev"
+.\.venv\Scripts\python.exe -m scripts.prepare_cycle_proof provision --prefix allerguard-cycle-proof-newrun
+```
+
+The command creates tables ending in `-business`, `-ledger`, `-audit`, and `-queue`, then seeds the fictional `demo-cafe`. Confirm the chosen prefix is unused before provisioning. The helper uses `eu-west-2`.
+
+### 2. Build the Linux package
+
+Use a new, empty package directory. Do not copy the Windows virtual environment into Lambda.
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install --no-deps --platform manylinux2014_x86_64 --implementation cp --python-version 3.12 --only-binary=:all: --target artifacts/cycle-package-newrun -r infra/cycle/requirements-linux.lock
+.\.venv\Scripts\python.exe -m scripts.prepare_cycle_proof package --folder artifacts/cycle-package-newrun --archive artifacts/cycle-proof-newrun.zip
+```
+
+The packaging command adds `src/`, generates `fixtures/cycle.json`, and creates the archive. The explicit dependency list and `--no-deps` avoid resolving Windows-only dependencies into the Linux package.
+
+### 3. Deploy with the schedule disabled
+
+Upload the ZIP to a private S3 code bucket in the deployment region. Validate and deploy `template.yaml` through CloudFormation, acknowledging its IAM role creation.
+
+Supply these parameters:
+
+| Parameter | Supply |
+|---|---|
+| `CodeBucket` / `CodeKey` | Bucket and object key for the uploaded ZIP |
+| `BusinessesTable` | Your prefix plus `-business` |
+| `LedgerTable` | Your prefix plus `-ledger` |
+| `AuditTable` | Your prefix plus `-audit` |
+| `EscalationsTable` | Your prefix plus `-queue` |
+| `ProposalMode` | `injected` |
+| `ScheduleState` | `DISABLED` |
+
+Keep reserved concurrency at one. The account must have sufficient available concurrency for that reservation. Use a new stack name for a fresh proof; leave the existing evidence and AgentCore hello resources intact.
+
+### 4. Capture the scheduled evidence
+
+1. Confirm deployment succeeded, the business is seeded, and the new ledger is empty.
+2. Enable the schedule by updating `ScheduleState` to `ENABLED`.
+3. Inspect the CloudWatch group `/allerguard/cycle/<stack-name>`.
+4. Save the `scheduled_cycle` report and invocation details from the first scheduled run.
+5. Check the four tables against the expected counts above.
+6. Capture a later `empty` result with unchanged watermark.
+7. Set `ScheduleState` back to `DISABLED` after verification.
+
+A successful manual invocation consumes the first batch too, so do not run one before collecting unattended first-run evidence. The initial audit count is **eight**, rather than the offline notification demo's eleven, because notifications are disabled.
+
+## Permissions and resolved issues
+
+The original deployment encountered a Lambda concurrency restriction. The recorded account quota was subsequently increased to 1,000, allowing the reservation of one execution.
+
+Execution then exposed a missing `dynamodb:Scan` permission: `list_seen_versions()` scans the alert ledger. The current template grants **Scan only on the ledger table**.
+
+The role also permits reads across the four tables, writes to the ledger/audit/queue, and log writes. It explicitly denies update, delete, batch-write, and table-deletion operations on the audit and queue tables. Conditional application writes enforce first-write retention; these permissions do not make the tables tamper-proof.
+
+The default role has no Bedrock or SES/SNS permissions. Although `bedrock` is an allowed proposal setting, selecting it alone is insufficient: model permissions and live verification would also be needed.
+
+Docker was unavailable during the original packaging work. The later successful Lambda executions establish that the deployed package ran; they do not establish that every future rebuilt package will import successfully.
+
+## Local checks and limitations
+
+Run the focused offline checks:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests/test_scheduled_cycle.py -q
+git diff --check
+```
+
+These tests use local emulation and do not deploy AWS resources.
+
+Reserved concurrency and disabled retries do not guarantee exactly-once delivery or an atomic update across all records. Investigate failed or uncertain runs before repeating them.
+
+This is a bounded scheduled-cycle proof. Full AgentCore deployment, a scheduled daily diary, live feed/model execution in this cycle, and external notification delivery remain separate work.

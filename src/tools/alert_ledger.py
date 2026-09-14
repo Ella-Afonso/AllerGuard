@@ -204,7 +204,10 @@ def get_new_alerts() -> list[Alert]:
 def load_new_alerts(settings: Settings) -> list[Alert]:
     """Use one explicit configuration for the source and its version ledger."""
     watermark = read_alert_watermark(settings)
-    alerts = load_alerts(settings, since=watermark)
+    since = watermark
+    if since is None and settings.fsa_mode == "live" and settings.fsa_initial_since is not None:
+        since = settings.fsa_initial_since.astimezone(UTC).isoformat().replace("+00:00", "Z")
+    alerts = load_alerts(settings, since=since)
 
     seen_versions = {(seen.alert_id, seen.modified) for seen in list_seen_versions(settings)}
 

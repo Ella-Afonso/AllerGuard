@@ -19,117 +19,30 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
-// Fictional demo-cafe business
-const DEMO_BUSINESS = {
-  id: "demo-cafe",
-  name: "The Walnut & Whisk Café",
-  handled_allergens: ["milk", "gluten", "eggs", "nuts"],
-  inventory: [
-    {
-      name: "Doritos Chilli Heatwave",
-      kind: "snack",
-      brand: "PepsiCo",
-      ingredients: ["corn", "vegetable oils", "chilli seasoning"],
-      allergens: [],
-      supplier: "PepsiCo UK",
-      batch_codes: []
-    },
-    {
-      name: "Walnut Brownie",
-      kind: "dessert",
-      brand: null,
-      ingredients: ["flour", "sugar", "butter", "eggs", "walnuts", "cocoa"],
-      allergens: ["gluten", "eggs", "milk", "nuts"],
-      supplier: "Daily Bakes Ltd",
-      batch_codes: []
-    },
-    {
-      name: "Oat Milk",
-      kind: "ingredient",
-      brand: "Oatly",
-      ingredients: ["oats", "water", "salt"],
-      allergens: [],
-      supplier: "Oatly UK",
-      batch_codes: []
-    },
-    {
-      name: "Sourdough Bread",
-      kind: "ingredient",
-      brand: null,
-      ingredients: ["wheat flour", "water", "salt", "sourdough culture"],
-      allergens: ["gluten"],
-      supplier: "Local Bakery Co",
-      batch_codes: []
-    }
-  ]
-};
+const DEMO_BUSINESS = ALLERGUARD_DEMO_DATA.business;
+const REPLAY_ALERTS = ALLERGUARD_DEMO_DATA.alerts;
 
-// Five historical FSA alerts - exact fixture data from project
-const REPLAY_ALERTS = [
-  {
-    id: "FSA-PRIN-43-2026",
-    title: "Sainsbury's recalls Inspired to Cook by Sainsbury's Pitted Black Olives because of contamination with Listeria monocytogenes",
-    tier: "NO_MATCH",
-    decision: "SILENT",
-    reason: "Listeria contamination in Sainsbury's olives; café does not stock this product",
-    alert_url: "https://alerts.food.gov.uk/news-alerts/alert/fsa-prin-43-2026",
-    modified: "2026-09-04T18:39:45.509Z"
-  },
-  {
-    id: "FSA-PRIN-39-2026",
-    title: "A.Vogel Ltd recalls Rapunzel bioSnacky Das Original Red Clover – Seeds for Sprouts and Seedlings because of contamination with E. coli (STEC)",
-    tier: "NO_MATCH",
-    decision: "SILENT",
-    reason: "E. coli contamination in sprouting seeds; café does not stock or use this product",
-    alert_url: "https://alerts.food.gov.uk/news-alerts/alert/fsa-prin-39-2026",
-    modified: "2026-08-10T15:49:00.442Z"
-  },
-  {
-    id: "FSA-AA-55-2020",
-    title: "Waitrose & Partners recalls Chocolate Mini Cupcakes 9s because of undeclared walnuts",
-    tier: "POSSIBLE",
-    decision: "ESCALATE",
-    reason: "Waitrose product with undeclared walnuts; café uses walnuts in walnut brownie; supplier relationship uncertain",
-    alert_url: "https://www.food.gov.uk/news-alerts/alert/fsa-aa-55-2020",
-    modified: "2020-09-17T16:47:41.292Z",
-    action_pack: {
-      owner_notice: "Waitrose Chocolate Mini Cupcakes recalled for undeclared walnuts (mispacked with Coffee and Walnut Mini Cupcakes). We serve walnut brownie. Review if we source any walnut ingredients through Waitrose supply chain.",
-      customer_notice: "We are reviewing a walnut allergen recall. If you have a walnut allergy and purchased our walnut brownie recently, please contact us for information.",
-      stock_action: "Verify walnut brownie supplier is not affected by Waitrose recall",
-      follow_up: "Confirm walnut ingredient source and supplier documentation"
-    }
-  },
-  {
-    id: "FSA-AA-42-2026",
-    title: "Tesco recalls Tesco Finest Caesar & Smoked Bacon Coleslaw because of undeclared mustard",
-    tier: "POSSIBLE",
-    decision: "ESCALATE",
-    reason: "Tesco coleslaw with undeclared mustard; café handles mustard in other items; cross-contamination or supplier review needed",
-    alert_url: "https://alerts.food.gov.uk/news-alerts/alert/fsa-aa-42-2026",
-    modified: "2026-09-03T16:11:41.515Z",
-    action_pack: {
-      owner_notice: "Tesco Finest Coleslaw recalled due to undeclared mustard (mispacked). We handle mustard. Verify our mustard supply chain has no Tesco connection.",
-      customer_notice: "We are reviewing a mustard allergen recall. Our mustard-containing items are prepared separately with documented allergen controls.",
-      stock_action: "Confirm no Tesco-supplied products; review mustard handling procedures",
-      follow_up: "Document allergen separation for mustard ingredients"
-    }
-  },
-  {
-    id: "FSA-AA-38-2026",
-    title: "PepsiCo recalls Doritos Chilli Heatwave because of undeclared milk",
-    tier: "LIKELY",
-    decision: "ESCALATE",
-    reason: "Exact stocked product (Doritos Chilli Heatwave 140g); batch codes unknown; milk allergen risk",
-    alert_url: "https://alerts.food.gov.uk/news-alerts/alert/fsa-aa-38-2026",
-    modified: "2026-07-17T20:16:28.573Z",
-    action_pack: {
-      owner_notice: "URGENT: Doritos Chilli Heatwave 140g recalled for undeclared milk (some packs mispacked). We stock this exact product. Locate all stock and check batch codes immediately.",
-      customer_notice: "We are withdrawing Doritos Chilli Heatwave from sale due to an undeclared milk recall. If you purchased this product and have a milk allergy or intolerance, please return it for a full refund.",
-      stock_action: "Remove all Doritos Chilli Heatwave from display immediately; check batch code GBC 209 184C best before 05 December 2026",
-      follow_up: "Contact PepsiCo at 0800 274777 for batch confirmation and refund process"
-    }
+const DRAFT_PREFIX = "DRAFT ONLY — NOT SENT — AWAITING OWNER APPROVAL:";
+function londonDate(value = new Date()) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/London", year: "numeric", month: "2-digit", day: "2-digit"
+  }).format(value);
+}
+function validatePack(pack) {
+  const fields = ["pull", "staff_note", "customer_notice", "substitution"];
+  if (!pack || typeof pack !== "object" || Array.isArray(pack) ||
+      Object.keys(pack).length !== fields.length ||
+      fields.some(key => typeof pack[key] !== "string" || !pack[key].trim() || pack[key].length > 4000)) {
+    throw new Error("Provide exactly four nonempty text fields: " + fields.join(", "));
   }
-];
+  if (!pack.customer_notice.startsWith(DRAFT_PREFIX)) {
+    throw new Error("Customer notice must retain the draft-only prefix.");
+  }
+  if (pack.substitution !== "No substitution suggested.") {
+    throw new Error("Substitution selection is unavailable in this public simulation.");
+  }
+  return pack;
+}
 
 // DOM elements
 const feedback = document.getElementById("feedback");
@@ -171,6 +84,16 @@ let currentView = "inbox";
 
 // Initialize
 function init() {
+  inboxContent.addEventListener("click", event => {
+    const button = event.target.closest("[data-action]");
+    if (!button) return;
+    event.preventDefault();
+    const id = button.dataset.alert;
+    if (button.dataset.action === "audit") switchView("audit");
+    else if (button.dataset.action === "edit") toggleEdit(id);
+    else if (button.dataset.action === "save-edit") submitEdit(id);
+    else recordDecision(id, button.dataset.action);
+  });
   startFreshBtn.addEventListener("click", startFresh);
   runReplayBtn.addEventListener("click", runReplay);
   fileDiaryBtn.addEventListener("click", fileDiary);
@@ -228,6 +151,12 @@ function startFresh() {
 // Run replay demo
 function runReplay() {
   if (!state.sessionActive) return;
+  if (state.demoRun) {
+    state.lastCycle = { status: "EMPTY", timestamp: new Date().toISOString() };
+    showFeedback("No new alerts. Stored decisions and evidence are unchanged.", "success");
+    updateUI();
+    return;
+  }
 
   showFeedback("Processing 5 historical FSA alerts...", "info");
 
@@ -260,7 +189,8 @@ function runReplay() {
         event: "escalation_queued",
         alert_id: alert.id,
         alert_title: alert.title,
-        tier: alert.tier
+        tier: alert.tier,
+        decision: alert.decision
       });
 
       // Simulated notification
@@ -272,13 +202,14 @@ function runReplay() {
         notification: {
           outcome: "ACCEPTED",
           provider: "SIMULATED",
-          mode: "disabled"
+          mode: "simulated"
         }
       });
     }
   });
 
   state.demoRun = true;
+  state.lastCycle = { status: "COMMITTED", timestamp };
   exportCsvBtn.disabled = false;
   exportHtmlBtn.disabled = false;
 
@@ -290,10 +221,10 @@ function runReplay() {
 // Record owner decision
 function recordDecision(alertId, choice, editedPack = null) {
   const alert = state.alerts.find(a => a.id === alertId);
-  if (!alert || alert.ownerDecision) return;
+  if (!alert || alert.decision !== "ESCALATE" || alert.ownerDecision || !["approve", "edit", "decline"].includes(choice)) return;
 
   const timestamp = new Date().toISOString();
-  const pack = editedPack || alert.action_pack;
+  const pack = structuredClone(validatePack(editedPack || alert.action_pack));
 
   alert.ownerDecision = {
     decision: choice,
@@ -308,6 +239,7 @@ function recordDecision(alertId, choice, editedPack = null) {
     alert_title: alert.title,
     owner_decision: {
       decision: choice,
+      original_pack: structuredClone(alert.action_pack),
       pack
     }
   });
@@ -321,21 +253,22 @@ function fileDiary() {
   if (!state.sessionActive || state.diary) return;
 
   const timestamp = new Date().toISOString();
-  const cutoff = new Date();
-  cutoff.setHours(23, 59, 59);
 
   state.diary = {
     timestamp,
-    entry_date: new Date().toISOString().split("T")[0],
+    entry_date: londonDate(),
     summary: "Daily safety record prepared. Opening and closing status await explicit owner confirmation.",
-    evidence_cutoff: cutoff.toISOString()
+    evidence_cutoff: timestamp,
+    linked_decisions: state.alerts.filter(a => a.ownerDecision && londonDate(new Date(a.ownerDecision.timestamp)) === londonDate()).map(a => ({alert_id: a.id, decision: a.ownerDecision.decision}))
   };
 
   state.auditLog.push({
     timestamp,
     event: "diary_filed",
     entry_date: state.diary.entry_date,
-    summary: state.diary.summary
+    summary: state.diary.summary,
+    evidence_cutoff: state.diary.evidence_cutoff,
+    linked_decisions: structuredClone(state.diary.linked_decisions)
   });
 
   showFeedback("Diary filed for today. Confirm opening and closing status below.", "success");
@@ -350,6 +283,10 @@ function confirmDiary(opening, closing, note) {
     return;
   }
 
+  if (!["confirmed", "exception"].includes(opening) || !["confirmed", "exception"].includes(closing)) {
+    showFeedback("Choose both opening and closing answers.", "error");
+    return;
+  }
   if ((opening === "exception" || closing === "exception") && !note.trim()) {
     showFeedback("Exception note is required when either answer is Exception.", "error");
     return;
@@ -378,6 +315,7 @@ function confirmDiary(opening, closing, note) {
 
 // Update UI
 function updateUI() {
+  exportCsvBtn.disabled = exportHtmlBtn.disabled = state.auditLog.length === 0;
   // Update stats
   if (state.sessionActive && state.demoRun) {
     summary.hidden = false;
@@ -390,10 +328,11 @@ function updateUI() {
     statEvents.textContent = state.auditLog.length;
 
     cycleStatus.hidden = false;
-    cycleStatus.textContent = `Last replay: COMMITTED · 5 retrieved · 2 silent · 3 escalated. ${new Date().toISOString()}`;
+    cycleStatus.textContent = `Last replay: ${state.lastCycle.status} · ${state.lastCycle.status === "EMPTY" ? "0 retrieved; evidence unchanged" : "5 retrieved · 2 silent · 3 escalated"}. ${state.lastCycle.timestamp}`;
 
     awsEvidence.hidden = false;
   } else {
+    statPending.textContent = statAssessed.textContent = statSilent.textContent = statEvents.textContent = "0";
     summary.hidden = true;
     cycleStatus.hidden = true;
     awsEvidence.hidden = true;
@@ -432,7 +371,7 @@ function renderInbox() {
       <div class="empty">
         <h2>All decisions recorded.</h2>
         <p>Silent decisions remain visible in the audit trail.</p>
-        <a href="#audit" onclick="switchView('audit')">See the audit trail →</a>
+        <a href="#audit" data-action="audit">See the audit trail →</a>
       </div>
     `;
     return;
@@ -449,21 +388,21 @@ function renderInbox() {
       <a href="${escapeHtml(alert.alert_url)}" target="_blank" rel="noopener noreferrer">Read the FSA source ↗</a>
       <p class="muted">Injected demonstration draft · Simulated matcher</p>
       <dl>
-        <dt>Owner Notice</dt><dd>${escapeHtml(alert.action_pack.owner_notice)}</dd>
+        <dt>Stock-pull draft</dt><dd>${escapeHtml(alert.action_pack.pull)}</dd>
         <dt>Customer Notice</dt><dd>${escapeHtml(alert.action_pack.customer_notice)}</dd>
-        <dt>Stock Action</dt><dd>${escapeHtml(alert.action_pack.stock_action)}</dd>
-        <dt>Follow Up</dt><dd>${escapeHtml(alert.action_pack.follow_up)}</dd>
+        <dt>Staff note</dt><dd>${escapeHtml(alert.action_pack.staff_note)}</dd>
+        <dt>Substitution</dt><dd>${escapeHtml(alert.action_pack.substitution)}</dd>
       </dl>
       <div class="decision-buttons">
-        <button class="primary-btn" onclick="recordDecision('${escapeHtml(alert.id)}', 'approve')">Approve draft</button>
-        <button class="secondary" onclick="toggleEdit('${escapeHtml(alert.id)}')">Edit draft</button>
-        <button class="secondary" onclick="recordDecision('${escapeHtml(alert.id)}', 'decline')">Decline</button>
+        <button class="primary-btn" data-action="approve" data-alert="${escapeHtml(alert.id)}">Approve draft</button>
+        <button class="secondary" data-action="edit" data-alert="${escapeHtml(alert.id)}">Edit draft</button>
+        <button class="secondary" data-action="decline" data-alert="${escapeHtml(alert.id)}">Decline</button>
       </div>
-      <div id="edit-${escapeHtml(alert.id)}" class="edit-form" style="display: none;">
+      <div id="edit-${escapeHtml(alert.id)}" class="edit-form" hidden>
         <h3>Edit action pack</h3>
         <label for="pack-${escapeHtml(alert.id)}">Edited JSON (modify values below)</label>
         <textarea id="pack-${escapeHtml(alert.id)}" rows="12">${escapeHtml(JSON.stringify(alert.action_pack, null, 2))}</textarea>
-        <button onclick="submitEdit('${escapeHtml(alert.id)}')">Record edited draft</button>
+        <button data-action="save-edit" data-alert="${escapeHtml(alert.id)}">Record edited draft</button>
         <p class="form-error" id="error-${escapeHtml(alert.id)}"></p>
       </div>
     </article>
@@ -473,7 +412,7 @@ function renderInbox() {
 // Toggle edit form
 function toggleEdit(alertId) {
   const form = document.getElementById(`edit-${alertId}`);
-  form.style.display = form.style.display === "none" ? "block" : "none";
+  form.hidden = !form.hidden;
 }
 
 // Submit edit
@@ -483,12 +422,10 @@ function submitEdit(alertId) {
 
   try {
     const pack = JSON.parse(textarea.value);
-    if (!pack.owner_notice || !pack.customer_notice || !pack.stock_action || !pack.follow_up) {
-      throw new Error("All four fields required: owner_notice, customer_notice, stock_action, follow_up");
-    }
+    validatePack(pack);
     recordDecision(alertId, "edit", pack);
   } catch (e) {
-    errorEl.textContent = escapeHtml("Invalid JSON: " + e.message);
+    errorEl.textContent = "Invalid draft: " + e.message;
   }
 }
 
@@ -539,7 +476,7 @@ function renderDiary() {
   }
 
   const linkedRecalls = state.alerts
-    .filter(a => a.ownerDecision)
+    .filter(a => a.ownerDecision && londonDate(new Date(a.ownerDecision.timestamp)) === state.diary.entry_date)
     .map(a => ({
       alert_id: a.id,
       alert_title: a.title,
@@ -550,7 +487,7 @@ function renderDiary() {
     <article class="card">
       <h2>Original filing</h2>
       <p>${escapeHtml(state.diary.summary)}</p>
-      <p>Opening: <b>${escapeHtml(state.diaryConfirmation ? state.diaryConfirmation.opening_status : "unconfirmed")}</b> · Closing: <b>${escapeHtml(state.diaryConfirmation ? state.diaryConfirmation.closing_status : "unconfirmed")}</b></p>
+      <p>Opening: <b>unconfirmed</b> · Closing: <b>unconfirmed</b> at original filing.</p>
       <p class="muted">Evidence cutoff: ${escapeHtml(new Date(state.diary.evidence_cutoff).toLocaleString("en-GB"))}</p>
 
       ${state.diaryConfirmation ? `
@@ -586,7 +523,8 @@ function renderDiary() {
     </article>
 
     <section>
-      <h2>Linked recall decisions</h2>
+      <h2>Recall decisions as of this view</h2>
+      <p>Later decisions appear here without rewriting the original filing. Choices do not prove stock or customer actions.</p>
       ${linkedRecalls.length > 0 ? linkedRecalls.map(link => `
         <article class="card">
           <span class="chip">${escapeHtml(link.state)}</span>
@@ -660,25 +598,25 @@ function switchView(viewName) {
   });
 }
 
+// One rectangular row per event, retaining the complete evidence payload.
+function buildCsv() {
+  const columns = ["mode", "timestamp", "event", "alert_id", "owner_choice", "payload_json"];
+  const cell = value => {
+    let text = String(value ?? "");
+    if (/^[=+@\-\t\r]/.test(text)) text = "'" + text;
+    return '"' + text.replace(/"/g, '""') + '"';
+  };
+  return [columns, ...state.auditLog.map(row => [
+    "PUBLIC BROWSER SIMULATION - NOT PRODUCTION DATA", row.timestamp,
+    row.event, row.alert_id || "", row.owner_decision?.decision || "", JSON.stringify(row)
+  ])].map(row => row.map(cell).join(",")).join("\r\n");
+}
+
 // Export CSV
 function exportCsv() {
   if (state.auditLog.length === 0) return;
 
-  const headers = ["timestamp", "event", "alert_id", "alert_title", "tier", "decision", "reason"];
-  const rows = [headers.join(",")];
-
-  rows.push("# PUBLIC BROWSER SIMULATION - NOT PRODUCTION DATA");
-  rows.push("");
-
-  state.auditLog.forEach(row => {
-    const values = headers.map(h => {
-      const val = row[h] || "";
-      return typeof val === "string" ? `"${val.replace(/"/g, '""')}"` : val;
-    });
-    rows.push(values.join(","));
-  });
-
-  const csv = rows.join("\n");
+  const csv = buildCsv();
   const blob = new Blob([csv], { type: "text/csv" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");

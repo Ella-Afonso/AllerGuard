@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import os
 import re
+from datetime import datetime
 from pathlib import Path
 from typing import Literal, Self, cast
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import AwareDatetime, BaseModel, Field, field_validator, model_validator
 
 DEFAULT_AWS_REGION = "eu-west-2"
 DEFAULT_BEDROCK_MODEL_ID = "eu.anthropic.claude-sonnet-4-5-20250929-v1:0"
@@ -64,6 +65,7 @@ class Settings(BaseModel):
     fsa_mode: Literal["live", "replay"] = DEFAULT_FSA_MODE
     fsa_base_uri: str = Field(default=DEFAULT_FSA_BASE_URI, min_length=1)
     fsa_fixtures_path: Path = DEFAULT_FSA_FIXTURES_PATH
+    fsa_initial_since: AwareDatetime | None = None
 
     notification_mode: Literal["disabled", "ses", "sns", "log"] = "disabled"
     ses_from_email: str | None = Field(default=None, repr=False)
@@ -99,6 +101,7 @@ class Settings(BaseModel):
     def from_environment(cls) -> "Settings":
         """Build settings from environment variables with safe project defaults."""
         notification_mode = os.environ.get("ALLERGUARD_NOTIFICATION_MODE", "disabled")
+        initial_since = os.environ.get("ALLERGUARD_FSA_INITIAL_SINCE")
         return cls(
             aws_region=os.environ.get("AWS_REGION", DEFAULT_AWS_REGION),
             cycle_business_id=os.environ.get("ALLERGUARD_CYCLE_BUSINESS_ID", "demo-cafe"),
@@ -133,6 +136,7 @@ class Settings(BaseModel):
                 DEFAULT_DYNAMODB_TABLE_ESCALATIONS,
             ),
             fsa_mode=_read_fsa_mode(),
+            fsa_initial_since=datetime.fromisoformat(initial_since) if initial_since else None,
             fsa_base_uri=os.environ.get(
                 "ALLERGUARD_FSA_BASE_URI",
                 DEFAULT_FSA_BASE_URI,
